@@ -14,10 +14,13 @@ const financeItems = [
   { href: '/budget', label: 'Budget', icon: '📋' },
 ]
 
-const topItems = [
+const leftItems = [
   { href: '/', label: 'Dashboard' },
-  { href: '/research', label: 'Research' },
+]
+
+const rightItems = [
   { href: '/chat', label: 'AI' },
+  { href: '/research', label: 'Research' },
 ]
 
 function useClickOutside(ref: React.RefObject<HTMLElement | null>, onClose: () => void) {
@@ -169,7 +172,7 @@ export function Navbar() {
             </Link>
 
             <div className="hidden md:flex items-center gap-0.5">
-              {topItems.map((item) => {
+              {leftItems.map((item) => {
                 const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href)
                 return (
                   <Link
@@ -186,6 +189,22 @@ export function Navbar() {
                 )
               })}
               <FinanceDropdown pathname={pathname} />
+              {rightItems.map((item) => {
+                const active = pathname.startsWith(item.href)
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      active
+                        ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300'
+                        : 'text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                )
+              })}
             </div>
           </div>
 
