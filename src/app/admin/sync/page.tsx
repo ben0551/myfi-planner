@@ -33,16 +33,27 @@ export default async function AdminSyncPage() {
     }
   })
 
+  const fundamentals = await prisma.marketIndexSnapshot.findMany({
+    where: { ticker: { in: tickers } },
+    select: {
+      ticker: true, fetchedAt: true, companyName: true, sector: true,
+      peRatio: true, eps: true, dividendYield: true, marketCap: true, extras: true,
+    },
+  })
+
+  const settings = await prisma.siteSettings.findUnique({ where: { id: 1 } })
+  const hasFmpKey = Boolean(settings?.fmpApiKey)
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Price Sync</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Sync historical price data and current quotes for all portfolio tickers from Yahoo Finance.
+          Sync historical price data and fundamental stats for all portfolio tickers.
         </p>
       </div>
 
-      <SyncPricesPanel tickers={tickers} coverage={coverage} priceCacheCount={priceCacheCount} />
+      <SyncPricesPanel tickers={tickers} coverage={coverage} priceCacheCount={priceCacheCount} fundamentals={fundamentals} hasFmpKey={hasFmpKey} />
     </div>
   )
 }

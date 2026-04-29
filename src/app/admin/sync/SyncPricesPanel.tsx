@@ -9,10 +9,31 @@ interface CoverageRow {
   to: string | null
 }
 
+interface FundamentalsRow {
+  ticker: string
+  fetchedAt: Date
+  companyName: string | null
+  sector: string | null
+  peRatio: number | null
+  eps: number | null
+  dividendYield: number | null
+  marketCap: string | null
+  extras: string | null
+}
+
+interface FundamentalsResult {
+  tickers: number
+  synced: number
+  errors: number
+  errorDetails?: string[]
+}
+
 interface Props {
   tickers: string[]
   coverage: CoverageRow[]
   priceCacheCount: number
+  fundamentals: FundamentalsRow[]
+  hasFmpKey: boolean
 }
 
 interface SyncResult {
@@ -36,12 +57,33 @@ interface PriceModal {
   prices: PriceRow[]
 }
 
-export function SyncPricesPanel({ tickers, coverage, priceCacheCount }: Props) {
+export function SyncPricesPanel({ tickers, coverage, priceCacheCount, fundamentals, hasFmpKey }: Props) {
   const [running, setRunning] = useState(false)
   const [result, setResult] = useState<SyncResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [modal, setModal] = useState<PriceModal | null>(null)
   const [modalLoading, setModalLoading] = useState(false)
+  const [fundRunning, setFundRunning] = useState(false)
+  const [fundResult, setFundResult] = useState<FundamentalsResult | null>(null)
+  const [fundError, setFundError] = useState<string | null>(null)
+
+  const fundMap = new Map(fundamentals.map((f) => [f.ticker, f]))
+
+  async function runFundamentalsSync() {
+    setFundRunning(true)
+    setFundResult(null)
+    setFundError(null)
+    try {
+      const res = await fetch('/api/admin/sync-fundamentals', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) { setFundError(data.error ?? 'Sync failed'); return }
+      setFundResult(data)
+    } catch (err) {
+      setFundError(err instanceof Error ? err.message : 'Network error')
+    } finally {
+      setFundRunning(false)
+    }
+  }
 
   async function openPriceHistory(ticker: string) {
     setModalLoading(true)
@@ -178,7 +220,7 @@ export function SyncPricesPanel({ tickers, coverage, priceCacheCount }: Props) {
                   {modal ? `${modal.ticker} — Price History` : 'Loading…'}
                 </h2>
                 {modal && (
-                  <p className="text-xs text-gray-500 mt-0.5">{modal.count.toLocaleString()} data points</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{modal.count.toLocaleString()} trading days</p>
                 )}
               </div>
               <button onClick={() => setModal(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
@@ -218,6 +260,90 @@ export function SyncPricesPanel({ tickers, coverage, priceCacheCount }: Props) {
         </div>
       )}
 
+      {/* Fundamentals sync */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-700">Fundamentals Sync</h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Fetches P/E, EPS, margins, ROE, revenue and more from FMP for every portfolio ticker.
+              {!hasFmpKey && <span className="text-amber-600 ml-1">Set your FMP API key in Admin → Settings first.</span>}
+            </p>
+          </div>
+          <button
+            onClick={runFundamentalsSync}
+            disabled={fundRunning || !hasFmpKey}
+            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {fundRunning ? 'Syncing…' : 'Sync Fundamentals'}
+          </button>
+        </div>
+
+        {fundRunning && (
+          <div className="flex items-center gap-2 text-sm text-violet-600 mb-3">
+            <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+            </svg>
+            Fetching fundamentals from FMP…
+          </div>
+        )}
+        {fundResult && (
+          <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800 mb-3">
+            Done — {fundResult.synced}/{fundResult.tickers} tickers synced.
+            {fundResult.errors > 0 && <span className="text-red-600 ml-2">{fundResult.errors} errors.</span>}
+          </div>
+        )}
+        {fundError && (
+          <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700 mb-3">{fundError}</div>
+        )}
+
+        {fundamentals.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-gray-100 text-left text-gray-500 uppercase tracking-wide">
+                  <th className="pb-2 font-medium">Ticker</th>
+                  <th className="pb-2 font-medium">Company</th>
+                  <th className="pb-2 font-medium">Sector</th>
+                  <th className="pb-2 font-medium text-right">Market Cap</th>
+                  <th className="pb-2 font-medium text-right">P/E</th>
+                  <th className="pb-2 font-medium text-right">EPS</th>
+                  <th className="pb-2 font-medium text-right">Div Yield</th>
+                  <th className="pb-2 font-medium text-right">ROE</th>
+                  <th className="pb-2 font-medium text-right">Net Margin</th>
+                  <th className="pb-2 font-medium text-gray-400">Last Synced</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {tickers.map((ticker) => {
+                  const f = fundMap.get(ticker)
+                  const extras = f?.extras ? JSON.parse(f.extras) as Record<string, number> : {}
+                  return (
+                    <tr key={ticker} className="hover:bg-gray-50">
+                      <td className="py-2 font-semibold text-gray-900">{ticker}</td>
+                      <td className="py-2 text-gray-600 max-w-[140px] truncate">{f?.companyName ?? <span className="text-gray-300">—</span>}</td>
+                      <td className="py-2 text-gray-500">{f?.sector ?? <span className="text-gray-300">—</span>}</td>
+                      <td className="py-2 text-right text-gray-700">{f?.marketCap ?? <span className="text-gray-300">—</span>}</td>
+                      <td className="py-2 text-right text-gray-700">{f?.peRatio != null ? f.peRatio.toFixed(1) : <span className="text-gray-300">—</span>}</td>
+                      <td className="py-2 text-right text-gray-700">{f?.eps != null ? `$${f.eps.toFixed(3)}` : <span className="text-gray-300">—</span>}</td>
+                      <td className="py-2 text-right text-gray-700">{f?.dividendYield != null ? `${(f.dividendYield * 100).toFixed(2)}%` : <span className="text-gray-300">—</span>}</td>
+                      <td className="py-2 text-right text-gray-700">{extras.roe != null ? `${(extras.roe * 100).toFixed(1)}%` : <span className="text-gray-300">—</span>}</td>
+                      <td className="py-2 text-right text-gray-700">{extras.netMargin != null ? `${(extras.netMargin * 100).toFixed(1)}%` : <span className="text-gray-300">—</span>}</td>
+                      <td className="py-2 text-gray-400">{f ? new Date(f.fetchedAt).toLocaleDateString('en-AU') : <span className="text-gray-300">Never</span>}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {fundamentals.length === 0 && hasFmpKey && (
+          <p className="text-sm text-gray-400 text-center py-4">No fundamentals synced yet — click Sync Fundamentals to fetch.</p>
+        )}
+      </div>
+
       {/* Coverage table */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100">
@@ -228,7 +354,7 @@ export function SyncPricesPanel({ tickers, coverage, priceCacheCount }: Props) {
             <thead>
               <tr className="border-b border-gray-100 text-left text-xs text-gray-500 uppercase tracking-wide">
                 <th className="px-6 py-3 font-medium">Ticker</th>
-                <th className="px-4 py-3 font-medium text-right">Data Points</th>
+                <th className="px-4 py-3 font-medium text-right">Price Records</th>
                 <th className="px-4 py-3 font-medium">From</th>
                 <th className="px-4 py-3 font-medium">To</th>
                 <th className="px-4 py-3 font-medium">Status</th>
