@@ -93,9 +93,27 @@ export async function getCachedAsxQuotes(
     stale.map(async (ticker) => {
       try {
         const quote = await getYfQuote(ticker)
-        if (!quote) throw new Error(`No data for ${ticker}`)
+        if (!quote) {
+          console.warn(`[asx] no quote returned for ${ticker}`)
+          return
+        }
 
-        await prisma.priceCache.upsert({
+        // Set result immediately — don't let a DB write failure suppress the price
+        result.set(ticker, {
+          ticker,
+          price: quote.price,
+          currency: 'AUD',
+          change: quote.change,
+          changePct: quote.changePct,
+          marketTime: now,
+          source: 'ASX',
+          companyName: quote.companyName ?? null,
+          fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh ?? null,
+          fiftyTwoWeekLow: quote.fiftyTwoWeekLow ?? null,
+        })
+
+        // Cache write is best-effort; failures are logged but don't affect the response
+        prisma.priceCache.upsert({
           where: { ticker },
           update: {
             price: quote.price,
@@ -122,25 +140,38 @@ export async function getCachedAsxQuotes(
             fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh ?? null,
             fiftyTwoWeekLow: quote.fiftyTwoWeekLow ?? null,
           },
-        })
-
-        result.set(ticker, {
-          ticker,
-          price: quote.price,
-          currency: 'AUD',
-          change: quote.change,
-          changePct: quote.changePct,
-          marketTime: now,
-          source: 'ASX',
-          companyName: quote.companyName ?? null,
-          fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh ?? null,
-          fiftyTwoWeekLow: quote.fiftyTwoWeekLow ?? null,
-        })
+        }).catch((err) => console.error(`[asx] PriceCache write failed for ${ticker}:`, err))
       } catch (err) {
         console.error(`[asx] getCachedAsxQuotes failed for ${ticker}:`, err)
       }
     })
   )
+
+  // Stale-cache fallback: for any ticker still missing after the live fetch,
+  // serve whatever is in the DB regardless of age rather than returning nothing.
+  const stillMissing = upper.filter((t) => !result.has(t))
+  if (stillMissing.length > 0) {
+    const staleRows = await prisma.priceCache.findMany({
+      where: { ticker: { in: stillMissing } },
+    })
+    for (const c of staleRows) {
+      if (c.price.toNumber() > 0) {
+        result.set(c.ticker, {
+          ticker: c.ticker,
+          price: c.price.toNumber(),
+          currency: c.currency,
+          change: c.change?.toNumber() ?? null,
+          changePct: c.changePct?.toNumber() ?? null,
+          marketTime: c.marketTime,
+          source: 'ASX',
+          companyName: c.companyName ?? null,
+          fiftyTwoWeekHigh: c.fiftyTwoWeekHigh?.toNumber() ?? null,
+          fiftyTwoWeekLow: c.fiftyTwoWeekLow?.toNumber() ?? null,
+        })
+        console.warn(`[asx] serving stale cache for ${c.ticker} (fetchedAt: ${c.fetchedAt.toISOString()})`)
+      }
+    }
+  }
 
   return result
 }
