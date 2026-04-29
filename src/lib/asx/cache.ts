@@ -259,7 +259,57 @@ export async function getCachedProfiles(tickers: string[]): Promise<Map<string, 
   return result
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export async function syncAnnouncements(_ticker: string): Promise<void> {
-  // ASX announcements API unavailable; no-op
+export async function syncAnnouncements(ticker: string): Promise<void> {
+  try {
+    const url = `https://www.asx.com.au/asx/1/company/${ticker.toUpperCase()}/announcements?count=20&market_sensitive=false`
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; MyFiPlanner/1.0)',
+        'Accept': 'application/json',
+      },
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!res.ok) return
+
+    const json = await res.json() as { data?: unknown[] }
+    const items = json.data ?? []
+
+    interface AsxItem {
+      id: string
+      header?: string
+      document_release_date?: string
+      url?: string
+      market_sensitive?: boolean
+      announcement_type_description?: string
+    }
+
+    await Promise.allSettled(
+      (items as AsxItem[]).map(async (item) => {
+        if (!item.id || !item.header) return
+        const docUrl = item.url ?? `https://www.asx.com.au/asx/1/file/${item.id}/announcement`
+        await prisma.announcement.upsert({
+          where: { asxId: item.id },
+          update: {
+            title: item.header,
+            url: docUrl,
+            marketSensitive: item.market_sensitive ?? false,
+            releasedAt: item.document_release_date ? new Date(item.document_release_date) : new Date(),
+            category: item.announcement_type_description ?? null,
+            fetchedAt: new Date(),
+          },
+          create: {
+            asxId: item.id,
+            ticker: ticker.toUpperCase(),
+            title: item.header,
+            url: docUrl,
+            marketSensitive: item.market_sensitive ?? false,
+            releasedAt: item.document_release_date ? new Date(item.document_release_date) : new Date(),
+            category: item.announcement_type_description ?? null,
+          },
+        })
+      })
+    )
+  } catch (err) {
+    console.error(`[asx] syncAnnouncements failed for ${ticker}:`, err)
+  }
 }
