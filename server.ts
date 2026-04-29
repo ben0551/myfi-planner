@@ -1,5 +1,7 @@
-// Corporate proxy uses a self-signed cert — disable TLS verification for all outbound requests
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+// Corporate proxy workaround — only disable TLS verification when explicitly opted in
+if (process.env.DISABLE_TLS_VERIFY === 'true') {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+}
 
 import { createServer } from 'http'
 import { parse } from 'url'

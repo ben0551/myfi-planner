@@ -34,6 +34,7 @@ model User {
   budgetCategories    BudgetCategory[]
   budgets             Budget[]
   budgetActuals       BudgetActual[]
+  watchlistItems      WatchlistItem[]
 }
 
 model AISettings {
@@ -456,6 +457,22 @@ model FireSettings {
   notes                 String?
   updatedAt             DateTime @updatedAt
   user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ── Watchlist ─────────────────────────────────────────────────────────────────
+
+model WatchlistItem {
+  id          String   @id @default(cuid())
+  userId      String
+  ticker      String
+  targetPrice Float?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, ticker])
+  @@index([userId])
 }
 
 // ── Budget models ─────────────────────────────────────────────────────────────

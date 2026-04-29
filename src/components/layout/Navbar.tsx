@@ -12,6 +12,10 @@ const financeItems = [
   { href: '/portfolios', label: 'Portfolios', icon: '📊' },
   { href: '/wealth', label: 'Wealth', icon: '🏦' },
   { href: '/budget', label: 'Budget', icon: '📋' },
+  { href: '/income', label: 'Income', icon: '💰' },
+  { href: '/tax', label: 'Tax', icon: '🧾' },
+  { href: '/watchlist', label: 'Watchlist', icon: '👁' },
+  { href: '/transactions', label: 'Transactions', icon: '🔍' },
 ]
 
 const leftItems = [

@@ -1,0 +1,218 @@
+import Link from 'next/link'
+import { redirect } from 'next/navigation'
+import { auth } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { computeCGTReport, computeDividendReport, availableFYs, currentFY, getFYLabel } from '@/lib/tax'
+import { Card } from '@/components/ui/Card'
+import { TaxDisclaimer } from '@/components/tax/TaxDisclaimer'
+import { FYSelector } from '@/components/tax/FYSelector'
+import { formatCurrency, gainClass } from '@/lib/formatters'
+
+export const dynamic = 'force-dynamic'
+
+export default async function TaxSummaryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ fy?: string }>
+}) {
+  const session = await auth()
+  if (!session) redirect('/login')
+
+  const { fy } = await searchParams
+
+  const portfolios = await prisma.portfolio.findMany({
+    where: { userId: session.user.id },
+    include: { transactions: { orderBy: { date: 'asc' } } },
+    orderBy: { createdAt: 'asc' },
+  })
+
+  // Collect all transactions across all portfolios to determine available FYs
+  const allTransactions = portfolios.flatMap((p) => p.transactions)
+  const allFYs = availableFYs(allTransactions)
+  const fyYear = fy ? parseInt(fy, 10) : currentFY()
+  const fyLabel = getFYLabel(fyYear)
+
+  // Compute per-portfolio and aggregate
+  const perPortfolio = portfolios
+    .filter((p) => p.transactions.length > 0)
+    .map((p) => {
+      const cgt = computeCGTReport(p.transactions, fyYear)
+      const div = computeDividendReport(p.transactions, fyYear)
+      return { portfolio: p, cgt, div }
+    })
+
+  const currency = portfolios[0]?.currency ?? 'AUD'
+
+  const agg = {
+    grossGain: perPortfolio.reduce((s, r) => s + r.cgt.totalGrossGain, 0),
+    discountApplied: perPortfolio.reduce((s, r) => s + r.cgt.totalDiscountApplied, 0),
+    capitalLosses: perPortfolio.reduce((s, r) => s + r.cgt.totalCapitalLosses, 0),
+    netAssessableGain: perPortfolio.reduce((s, r) => s + r.cgt.netAssessableGain, 0),
+    cashDividends: perPortfolio.reduce((s, r) => s + r.div.totalCash, 0),
+    frankingCredits: perPortfolio.reduce((s, r) => s + r.div.totalFrankingCredits, 0),
+    grossedUp: perPortfolio.reduce((s, r) => s + r.div.totalGrossedUp, 0),
+  }
+  const totalAssessable = agg.netAssessableGain + agg.grossedUp
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Tax Summary</h1>
+          <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">{fyLabel} · All portfolios</p>
+        </div>
+        <FYSelector availableFYs={allFYs} currentFY={fyYear} basePath="/tax" />
+      </div>
+
+      <TaxDisclaimer />
+
+      {allTransactions.length === 0 && (
+        <Card>
+          <p className="text-center text-gray-500 py-8 text-sm">No transactions recorded yet.</p>
+        </Card>
+      )}
+
+      {allTransactions.length > 0 && (
+        <>
+          {/* CGT summary */}
+          <div>
+            <h2 className="text-sm font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-3">
+              Capital Gains Tax
+            </h2>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card>
+                <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Gross Gains</p>
+                <p className={`text-xl font-bold mt-1 ${gainClass(agg.grossGain)}`}>
+                  {formatCurrency(agg.grossGain, currency)}
+                </p>
+              </Card>
+              <Card>
+                <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">50% Discount</p>
+                <p className="text-xl font-bold mt-1 text-green-600">
+                  {agg.discountApplied > 0 ? formatCurrency(-agg.discountApplied, currency) : '—'}
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">Assets held &gt;12 months</p>
+              </Card>
+              <Card>
+                <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Capital Losses</p>
+                <p className="text-xl font-bold mt-1 text-red-600">
+                  {agg.capitalLosses > 0 ? formatCurrency(-agg.capitalLosses, currency) : '—'}
+                </p>
+              </Card>
+              <Card>
+                <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Net Assessable</p>
+                <p className={`text-xl font-bold mt-1 ${gainClass(agg.netAssessableGain)}`}>
+                  {formatCurrency(agg.netAssessableGain, currency)}
+                </p>
+              </Card>
+            </div>
+          </div>
+
+          {/* Dividend summary */}
+          <div>
+            <h2 className="text-sm font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-3">
+              Dividend Income
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Card>
+                <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Cash Dividends</p>
+                <p className="text-2xl font-bold mt-1 text-gray-900 dark:text-white">
+                  {formatCurrency(agg.cashDividends, currency)}
+                </p>
+              </Card>
+              <Card>
+                <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Franking Credits</p>
+                <p className="text-2xl font-bold mt-1 text-indigo-600">
+                  {agg.frankingCredits > 0 ? formatCurrency(agg.frankingCredits, currency) : '—'}
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">Offset against tax payable</p>
+              </Card>
+              <Card>
+                <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Grossed-Up Total</p>
+                <p className="text-2xl font-bold mt-1 text-gray-900 dark:text-white">
+                  {formatCurrency(agg.grossedUp, currency)}
+                </p>
+              </Card>
+            </div>
+          </div>
+
+          {/* Total assessable income */}
+          <Card className="border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/30">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-300">
+                  Total Assessable Income — {fyLabel}
+                </p>
+                <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-0.5">
+                  Net CGT gain + grossed-up dividend income
+                </p>
+              </div>
+              <p className="text-3xl font-bold text-indigo-700 dark:text-indigo-300">
+                {formatCurrency(totalAssessable, currency)}
+              </p>
+            </div>
+            {agg.frankingCredits > 0 && (
+              <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-3 border-t border-indigo-200 dark:border-indigo-700 pt-3">
+                Plus {formatCurrency(agg.frankingCredits, currency)} franking credits offset against your income tax.
+                If your marginal rate generates less tax than the credit, the excess is refundable.
+              </p>
+            )}
+          </Card>
+
+          {/* Per-portfolio breakdown */}
+          {perPortfolio.length > 1 && (
+            <Card padding={false}>
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-slate-700">
+                <h2 className="font-semibold text-gray-900 dark:text-white">By Portfolio</h2>
+              </div>
+              <div className="divide-y divide-gray-100 dark:divide-slate-700">
+                {perPortfolio.map(({ portfolio: p, cgt, div }) => (
+                  <div key={p.id} className="px-6 py-4 flex items-center justify-between gap-4">
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white text-sm">{p.name}</p>
+                      <div className="flex gap-4 mt-1 text-xs text-gray-500 dark:text-slate-400">
+                        <span>CGT: <span className={gainClass(cgt.netAssessableGain)}>{formatCurrency(cgt.netAssessableGain, p.currency)}</span></span>
+                        <span>Dividends: {formatCurrency(div.totalGrossedUp, p.currency)} grossed-up</span>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <Link
+                        href={`/portfolios/${p.id}/tax/cgt?fy=${fyYear}`}
+                        className="text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-200"
+                      >
+                        CGT detail →
+                      </Link>
+                      <Link
+                        href={`/portfolios/${p.id}/tax/dividends?fy=${fyYear}`}
+                        className="text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-200"
+                      >
+                        Dividends →
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {perPortfolio.length === 1 && (
+            <div className="flex gap-3 text-sm">
+              <Link
+                href={`/portfolios/${perPortfolio[0].portfolio.id}/tax/cgt?fy=${fyYear}`}
+                className="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400"
+              >
+                → CGT disposal events
+              </Link>
+              <Link
+                href={`/portfolios/${perPortfolio[0].portfolio.id}/tax/dividends?fy=${fyYear}`}
+                className="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400"
+              >
+                → Dividend detail
+              </Link>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
