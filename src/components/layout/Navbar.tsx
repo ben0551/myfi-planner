@@ -8,24 +8,32 @@ import { NotificationBell } from '@/components/alerts/NotificationBell'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { ThemePicker } from '@/components/ui/ThemePicker'
 
-const financeItems = [
+// Invest: portfolio-facing pages
+const investItems = [
   { href: '/portfolios', label: 'Portfolios', icon: '📊' },
-  { href: '/wealth', label: 'Wealth', icon: '🏦' },
-  { href: '/budget', label: 'Budget', icon: '📋' },
-  { href: '/income', label: 'Income', icon: '💰' },
-  { href: '/tax', label: 'Tax', icon: '🧾' },
   { href: '/watchlist', label: 'Watchlist', icon: '👁' },
+  { href: '/income', label: 'Income', icon: '💰' },
   { href: '/transactions', label: 'Transactions', icon: '🔍' },
+  { href: '/tax', label: 'Tax', icon: '🧾' },
+]
+
+// Money: wealth and budget pages
+const moneyItems = [
+  { href: '/wealth', label: 'Wealth', icon: '🏦' },
+  { href: '/household', label: 'Household', icon: '🏠' },
+  { href: '/budget', label: 'Budget', icon: '📋' },
   { href: '/bank-import', label: 'Bank Import', icon: '📥' },
 ]
+
+const allNavItems = [...investItems, ...moneyItems]
 
 const leftItems = [
   { href: '/', label: 'Dashboard' },
 ]
 
 const rightItems = [
-  { href: '/chat', label: 'AI' },
   { href: '/research', label: 'Research' },
+  { href: '/chat', label: 'AI' },
 ]
 
 function useClickOutside(ref: React.RefObject<HTMLElement | null>, onClose: () => void) {
@@ -38,14 +46,18 @@ function useClickOutside(ref: React.RefObject<HTMLElement | null>, onClose: () =
   }, [ref, onClose])
 }
 
-function FinanceDropdown({ pathname }: { pathname: string }) {
+function NavDropdown({ label: defaultLabel, items, pathname }: {
+  label: string
+  items: { href: string; label: string; icon: string }[]
+  pathname: string
+}) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useClickOutside(ref, () => setOpen(false))
 
-  const active = financeItems.find((i) => pathname.startsWith(i.href))
+  const active = items.find((i) => pathname.startsWith(i.href))
   const isActive = !!active
-  const label = active?.label ?? 'Finance'
+  const label = active?.label ?? defaultLabel
 
   return (
     <div ref={ref} className="relative">
@@ -65,7 +77,7 @@ function FinanceDropdown({ pathname }: { pathname: string }) {
 
       {open && (
         <div className="absolute left-0 top-11 w-44 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-lg py-1.5 z-50">
-          {financeItems.map((item) => {
+          {items.map((item) => {
             const itemActive = pathname.startsWith(item.href)
             return (
               <Link
@@ -166,7 +178,7 @@ function MobileMenu({ pathname }: { pathname: string }) {
 
   const allItems = [
     ...leftItems.map((i) => ({ ...i, icon: '' })),
-    ...financeItems,
+    ...allNavItems,
     ...rightItems.map((i) => ({ ...i, icon: '' })),
   ]
 
@@ -248,7 +260,8 @@ export function Navbar() {
                   </Link>
                 )
               })}
-              <FinanceDropdown pathname={pathname} />
+              <NavDropdown label="Invest" items={investItems} pathname={pathname} />
+              <NavDropdown label="Money" items={moneyItems} pathname={pathname} />
               {rightItems.map((item) => {
                 const active = pathname.startsWith(item.href)
                 return (

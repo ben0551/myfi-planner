@@ -35,6 +35,7 @@ model User {
   budgets             Budget[]
   budgetActuals       BudgetActual[]
   watchlistItems      WatchlistItem[]
+  householdMemberships HouseholdMember[]
 }
 
 model AISettings {
@@ -457,6 +458,30 @@ model FireSettings {
   notes                 String?
   updatedAt             DateTime @updatedAt
   user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ── Household / shared view ───────────────────────────────────────────────────
+
+model Household {
+  id         String            @id @default(cuid())
+  name       String
+  inviteCode String            @unique @default(cuid())
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  members    HouseholdMember[]
+}
+
+model HouseholdMember {
+  id          String    @id @default(cuid())
+  householdId String
+  userId      String
+  role        String    @default("MEMBER") // OWNER | MEMBER
+  joinedAt    DateTime  @default(now())
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, userId])
+  @@index([userId])
 }
 
 // ── Watchlist ─────────────────────────────────────────────────────────────────
