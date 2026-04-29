@@ -1,92 +1,121 @@
-# MyFiPlanner
+# MyFi Planner
 
-A personal finance tracker built for Australians. Track your investment portfolios, net worth, superannuation, property, and budget — all in one self-hosted app.
+> Your complete financial picture, self-hosted and private.
 
-![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)
-![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql)
-![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker)
+MyFi Planner is a personal finance app built for Australians who want full visibility of their wealth — shares, super, property, cash, and budget — without handing their data to a third party. Run it yourself, invite your family, and actually understand where you stand financially.
+
+---
+
+## Why MyFi Planner?
+
+Most finance apps either connect to your bank (storing your credentials on someone else's server), charge a monthly subscription, or only track one thing. MyFi Planner is different:
+
+- **Self-hosted** — your financial data stays on your own machine
+- **No subscriptions** — run it forever for free
+- **Family-ready** — invite partners, family members, or friends; everyone gets their own private account
+- **Australian-first** — ASX prices, AUD, franking credits, superannuation, FIRE planning built around Australian tax and super rules
+- **Everything in one place** — shares, property, super, cash, budget, and FIRE projections all talk to each other
 
 ---
 
 ## Features
 
-### 📊 Investment Portfolios
-- Track ASX and international stock holdings across multiple portfolios
-- Real-time price quotes and historical price charts via Yahoo Finance
-- Capital gains, cost basis, and return calculations
-- CSV export and email-based transaction import (SMTP ingest)
-- Set savings goals with progress tracking
+### 📊 Investment Portfolio Tracker
 
-### 💰 Wealth Dashboard
-- Live net worth across all asset classes: shares, property, super, cash
-- Historical net worth chart reconstructed from actual dated entries — not just daily visits
-- Property value tracking with capital gain calculation
-- Mortgage tracking
+Track every buy, sell, and dividend across multiple portfolios. MyFi Planner pulls live and historical prices from Yahoo Finance so you always know what your holdings are worth.
+
+- Real-time prices with automatic daily sync
+- Historical value charts per portfolio
+- Capital gains tracking with average cost basis
+- Dividend income with franking credits and grossed-up amounts
+- Multiple portfolios — separate your personal account, partner's account, SMSF
+- Import transactions by forwarding broker confirmation emails, or enter them manually
+- CSV export for your records or tax time
+
+### 🏠 Wealth Dashboard
+
+One screen showing your complete financial picture: what you own, what you owe, and how it has changed over time. The net worth history chart is built from your actual data — portfolio prices, dated super balance entries, and property valuations — not just dashboard visits.
+
+Asset classes tracked:
+- Investment portfolios (live market prices)
+- Superannuation balances (with dated history for graphing)
+- Properties (with value history and capital gain)
+- Cash accounts and savings (with dated balance history)
+- Mortgages and liabilities
 
 ### 🦘 Superannuation
-- Track multiple super funds with balance history
-- Graph balance growth over time
-- Contributions breakdown (employer / employee / voluntary)
+
+Super is often your largest asset and the hardest to track. Record your balance at any point in time and graph it to see your fund's actual performance over the years.
+
+- Record balances at any date — build a history over months and years
+- Separate super growth rate (typically 8–10%) from your investment return
+- Feeds directly into your FIRE projections
+
+### 🏡 Property
+
+Track the value of your properties over time, not just what you paid. Record a valuation whenever you get one — bank revaluation, real estate agent estimate, or CoreLogic — and watch your equity grow.
+
+- Value history with chart
+- Capital gain (current value vs purchase price)
+- Mortgage balance tracking
+- Partial ownership support for jointly held properties
 
 ### 🔥 FIRE Planner
-- Financial Independence / Retire Early projections
-- Separate super growth rate (typically 8–10%) from investment return
-- Inheritance / windfall modelling ("bridge" analysis)
-- Configurable withdrawal rate, inflation, expected return
-- Year-of-birth input so age updates automatically each year
+
+Answer the question every Australian investor wants to know: *when can I stop working?*
+
+Enter your target annual spend, expected return, and super growth rate. MyFi Planner projects your portfolio forward month by month — showing the exact month you hit your FIRE number.
+
+- Super modelled separately at its own growth rate
+- Inheritance and windfall modelling — see if an expected inheritance brings your FIRE date forward
+- Bridge analysis — models what happens if you inherit after you have already retired
+- Inflation-adjusted projections
+- Configurable withdrawal rate, return rate, and inflation
 
 ### 📋 Budget
-- Monthly budgets with 23 sensible Australian default categories
-- Income vs expense tracking with actual spend entry
-- Budget vs actual bar chart, spending breakdown donut, 12-month trend
-- Groups: Income, Living, Transport, Health, Savings, Other
-- Over-budget rows highlighted in red
 
-### 🤖 AI Chat
-- Chat with Claude, GPT-4, or Gemini about your finances
-- Context-aware: the AI knows your portfolio, net worth, and FIRE progress
-- Bring your own API key (stored per-user, never shared)
+Know where your money is actually going. Set a monthly budget per category and enter what you actually spent. MyFi Planner shows you the gap.
 
-### 🔔 Alerts
-- Price alerts: notify when a stock crosses a target price
-- Email notifications
+Comes pre-loaded with 23 sensible Australian default categories:
+- Mortgage / Rent, Groceries, Electricity & Gas, Water & Rates
+- Health Insurance (PHI), Medical & Dental
+- Fuel, Registration & CTP, Public Transport
+- Voluntary Super, Emergency Fund, Investments
+- Holidays, Home Maintenance, and more
 
-### 👥 Multi-user
-- Invite family or friends to create their own accounts
-- Each user has fully isolated data
-- Admin panel for user management and price sync
+What you get:
+- Monthly budget and actual entry — one screen, one save
+- Rows turn red when you go over budget as you type
+- Budget vs actual bar chart showing every category at a glance
+- Spending breakdown donut chart by group
+- 12-month trend to see if you are improving over time
+
+### 🤖 AI Financial Assistant
+
+Ask questions about your own finances in plain English. The AI knows your portfolio, net worth, FIRE progress, and budget — giving contextual answers, not generic advice.
+
+*"Am I on track to retire at 55?"*
+*"Which of my holdings has the best return this year?"*
+*"How much did I spend on dining out last quarter?"*
+
+Bring your own API key for Claude, GPT-4, or Gemini. Keys are stored per-user and never shared.
+
+### 🔔 Price Alerts
+
+Set a target price on any stock and get notified when it crosses the threshold — useful for watching stocks you want to buy, or protecting positions you hold.
 
 ### 🎨 Themes
-- Light / dark mode
-- 8 colour themes: Classic Indigo, Wall Street Gold, Bull Market Emerald, Fox Orange, Dolphin Cyan, Flamingo Rose, Night Owl Violet, Wolf Slate
+
+Switch between light and dark mode, and choose from 8 colour themes:
+Classic Indigo, Wall Street Gold, Bull Market Emerald, Fox Orange, Dolphin Cyan, Flamingo Rose, Night Owl Violet, Wolf Slate.
 
 ---
 
-## Tech Stack
+## Getting Started
 
-| Layer | Technology |
-|---|---|
-| Framework | Next.js 15 (App Router) |
-| Language | TypeScript |
-| Database | PostgreSQL 16 |
-| ORM | Prisma |
-| Auth | NextAuth.js (credentials) |
-| Styling | Tailwind CSS v4 |
-| Charts | Recharts |
-| AI | Anthropic / OpenAI / Google Gemini |
-| Deployment | Docker + Traefik |
+MyFi Planner runs as a single Docker Compose stack. You need Docker installed and a domain pointed at your machine.
 
----
-
-## Deployment
-
-### Prerequisites
-- Docker + Docker Compose
-- Traefik reverse proxy running with `traefik_proxy` external network
-- A domain pointed at your server
-
-### 1. Clone and configure
+### 1. Clone the repo
 
 ```bash
 git clone https://github.com/ben0551/myfi-planner.git
@@ -94,20 +123,17 @@ cd myfi-planner
 cp .env.example .env
 ```
 
-Edit `.env`:
+### 2. Edit `.env`
 
 ```env
-AUTH_SECRET="$(openssl rand -base64 32)"
+# Generate with: openssl rand -base64 32
+AUTH_SECRET="your-random-secret-here"
+
 DOMAIN="myfi.yourdomain.com"
-DB_PASSWORD="a-strong-password"
+DB_PASSWORD="pick-a-strong-password"
+
 ADMIN_EMAIL="you@example.com"
 ADMIN_PASSWORD="your-admin-password"
-```
-
-### 2. Create the Traefik network (if it doesn't exist)
-
-```bash
-docker network create traefik_proxy
 ```
 
 ### 3. Build and start
@@ -116,53 +142,52 @@ docker network create traefik_proxy
 docker compose up -d --build
 ```
 
-On first boot, the database schema is created automatically (`prisma db push`) and the admin account is seeded.
+The database schema is created automatically on first boot and the admin account is seeded. Visit your domain and log in.
 
-### 4. Access
+### 4. Invite family or friends
 
-Navigate to `https://myfi.yourdomain.com` and log in with your admin credentials.
+Go to **Admin** (in the user menu, top right) to manage accounts. Share your URL — others can register themselves and you approve their account before they can log in.
 
 ---
 
-## Local Development
+## Backup and Restore
 
 ```bash
-# Install dependencies
-npm install
-
-# Set up environment
-cp .env.example .env
-# Edit DATABASE_URL to point to a local PostgreSQL instance
-
-# Push schema to DB
-npx prisma db push
-
-# Start dev server
-npm run dev
-```
-
-App runs at `http://localhost:3000`.
-
----
-
-## Email Import
-
-MyFiPlanner runs a lightweight SMTP server on port 2525. Forward broker confirmation emails to this port and transactions are automatically parsed into pending imports for review.
-
----
-
-## Backup
-
-```bash
-# Dump the database
-docker compose exec db pg_dump -U myfi myfi > backup.sql
+# Backup
+docker compose exec db pg_dump -U myfi myfi > myfi-backup-$(date +%Y%m%d).sql
 
 # Restore
-docker compose exec -T db psql -U myfi myfi < backup.sql
+docker compose exec -T db psql -U myfi myfi < myfi-backup-20250101.sql
 ```
 
 ---
 
-## License
+## FAQ
 
-MIT
+**Is my data private?**
+Yes. Everything runs on your own hardware. The only outbound calls are Yahoo Finance for stock prices and whichever AI provider you configure — and only when you use the AI chat.
+
+**Can my partner or family members use it?**
+Yes. Each person has their own account with completely separate, private data. You control who can sign up.
+
+**Does it work for non-ASX stocks?**
+Mostly yes — Yahoo Finance covers most global exchanges. The app is designed around ASX tickers but international holdings work fine.
+
+**What if I skip the AI key?**
+The AI Chat feature will show a prompt to configure a key. Everything else works normally.
+
+**Do I need a domain?**
+Not strictly — you can run it on your local network by IP address. A domain gives you HTTPS via Let's Encrypt through Traefik.
+
+---
+
+## Roadmap
+
+- [ ] CSV bulk import for transactions
+- [ ] Bank feed integration (read-only)
+- [ ] Tax report PDF export
+- [ ] Shared household view — combined net worth across family accounts
+
+---
+
+*Self-hosted. No subscriptions. Your data stays yours.*
