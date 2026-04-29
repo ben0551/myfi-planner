@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     prices: rows.map((r) => ({
       date: r.date.toISOString().split('T')[0],
       close: Number(r.close),
-      volume: r.volume ?? null,
+      volume: r.volume != null ? Number(r.volume) : null,
     })),
   })
 }

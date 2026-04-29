@@ -64,6 +64,9 @@ export default async function PortfolioPage({
           <Link href={`/portfolios/${id}/transactions/new`}>
             <Button size="sm">+ Add Transaction</Button>
           </Link>
+          <Link href={`/portfolios/${id}/transactions/import`}>
+            <Button size="sm" variant="secondary">Import CSV</Button>
+          </Link>
           <Link href={`/portfolios/${id}/transactions`}>
             <Button size="sm" variant="secondary">History</Button>
           </Link>
@@ -84,6 +87,26 @@ export default async function PortfolioPage({
           </Link>
         </div>
       </div>
+
+      {/* Empty state */}
+      {transactions.length === 0 && (
+        <Card>
+          <div className="py-10 text-center">
+            <p className="text-gray-500 text-sm mb-1">This portfolio has no transactions yet.</p>
+            <p className="text-gray-400 text-xs mb-6">Add them one by one or import your full history from a CSV file.</p>
+            <div className="flex justify-center gap-3">
+              <Link href={`/portfolios/${id}/transactions/import`}>
+                <Button>Import CSV</Button>
+              </Link>
+              <Link href={`/portfolios/${id}/transactions/new`}>
+                <Button variant="secondary">Add Transaction</Button>
+              </Link>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {transactions.length > 0 && <>
 
       {/* Performance summary */}
       <PerformanceSummary performance={performance} />
@@ -128,6 +151,8 @@ export default async function PortfolioPage({
           />
         </Card>
       </div>
+
+      </> }
     </div>
   )
 }
