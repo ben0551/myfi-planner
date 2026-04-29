@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/Input'
+import { LabelledCurrencyInput } from '@/components/ui/CurrencyInput'
 import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
 
@@ -142,15 +143,12 @@ export function PropertyForm({ propertyId, initialValues, onSuccess }: Props) {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Input
+        <LabelledCurrencyInput
           label="Purchase Price"
-          type="number"
-          min="0"
-          step="1"
           required
-          placeholder="500000"
+          placeholder="500,000"
           value={values.purchasePrice}
-          onChange={(e) => set('purchasePrice', e.target.value)}
+          onChange={(v) => set('purchasePrice', v)}
         />
         <Input
           label="Purchase Date"
@@ -162,15 +160,12 @@ export function PropertyForm({ propertyId, initialValues, onSuccess }: Props) {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Input
+        <LabelledCurrencyInput
           label="Current Value"
-          type="number"
-          min="0"
-          step="1"
           required
-          placeholder="600000"
+          placeholder="600,000"
           value={values.currentValue}
-          onChange={(e) => set('currentValue', e.target.value)}
+          onChange={(v) => set('currentValue', v)}
         />
         <Input
           label="Ownership %"

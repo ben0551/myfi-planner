@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/Input'
+import { LabelledCurrencyInput } from '@/components/ui/CurrencyInput'
 import { Button } from '@/components/ui/Button'
 
 interface InheritanceValues {
@@ -101,15 +102,12 @@ export function InheritanceForm({ itemId, initialValues, onCancel }: Props) {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Input
+        <LabelledCurrencyInput
           label="Expected Amount (AUD)"
-          type="number"
-          min="0"
-          step="1000"
           required
-          placeholder="500000"
+          placeholder="500,000"
           value={values.amount}
-          onChange={(e) => set('amount', e.target.value)}
+          onChange={(v) => set('amount', v)}
         />
         <Input
           label="Expected Year"

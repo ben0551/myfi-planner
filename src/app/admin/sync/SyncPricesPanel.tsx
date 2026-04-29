@@ -24,10 +24,38 @@ interface SyncResult {
   errorDetails?: string[]
 }
 
+interface PriceRow {
+  date: string
+  close: number
+  volume: number | null
+}
+
+interface PriceModal {
+  ticker: string
+  count: number
+  prices: PriceRow[]
+}
+
 export function SyncPricesPanel({ tickers, coverage, priceCacheCount }: Props) {
   const [running, setRunning] = useState(false)
   const [result, setResult] = useState<SyncResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [modal, setModal] = useState<PriceModal | null>(null)
+  const [modalLoading, setModalLoading] = useState(false)
+
+  async function openPriceHistory(ticker: string) {
+    setModalLoading(true)
+    setModal(null)
+    try {
+      const res = await fetch(`/api/admin/price-history?ticker=${ticker}`)
+      const data = await res.json()
+      setModal(data)
+    } catch {
+      // silently fail — user can retry
+    } finally {
+      setModalLoading(false)
+    }
+  }
 
   async function runSync(subset?: string[]) {
     setRunning(true)
@@ -137,6 +165,59 @@ export function SyncPricesPanel({ tickers, coverage, priceCacheCount }: Props) {
         )}
       </div>
 
+      {/* Price history modal */}
+      {(modalLoading || modal) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => { setModal(null) }}>
+          <div
+            className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div>
+                <h2 className="text-base font-semibold text-gray-900">
+                  {modal ? `${modal.ticker} — Price History` : 'Loading…'}
+                </h2>
+                {modal && (
+                  <p className="text-xs text-gray-500 mt-0.5">{modal.count.toLocaleString()} data points</p>
+                )}
+              </div>
+              <button onClick={() => setModal(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+            </div>
+
+            {modalLoading && (
+              <div className="flex items-center justify-center py-16 text-gray-400 text-sm">Loading…</div>
+            )}
+
+            {modal && (
+              <div className="overflow-y-auto flex-1">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-gray-50 border-b border-gray-100">
+                    <tr className="text-xs text-gray-500 uppercase tracking-wide text-left">
+                      <th className="px-6 py-3 font-medium">Date</th>
+                      <th className="px-4 py-3 font-medium text-right">Close (AUD)</th>
+                      <th className="px-4 py-3 font-medium text-right">Volume</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {modal.prices.map((p) => (
+                      <tr key={p.date} className="hover:bg-gray-50">
+                        <td className="px-6 py-2.5 text-gray-700 tabular-nums">{p.date}</td>
+                        <td className="px-4 py-2.5 text-right text-gray-900 tabular-nums font-medium">
+                          ${p.close.toFixed(3)}
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-gray-500 tabular-nums">
+                          {p.volume != null ? p.volume.toLocaleString() : <span className="text-gray-300">—</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Coverage table */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100">
@@ -160,7 +241,18 @@ export function SyncPricesPanel({ tickers, coverage, priceCacheCount }: Props) {
                 return (
                   <tr key={c.ticker} className="hover:bg-gray-50">
                     <td className="px-6 py-3 font-semibold text-gray-900">{c.ticker}</td>
-                    <td className="px-4 py-3 text-right text-gray-600">{c.points > 0 ? c.points.toLocaleString() : <span className="text-gray-300">—</span>}</td>
+                    <td className="px-4 py-3 text-right text-gray-600">
+                      {c.points > 0 ? (
+                        <button
+                          onClick={() => openPriceHistory(c.ticker)}
+                          className="text-indigo-600 hover:underline font-medium"
+                        >
+                          {c.points.toLocaleString()}
+                        </button>
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-gray-500 text-xs">{c.from ?? <span className="text-gray-300">—</span>}</td>
                     <td className="px-4 py-3 text-gray-500 text-xs">{c.to ?? <span className="text-gray-300">—</span>}</td>
                     <td className="px-4 py-3">

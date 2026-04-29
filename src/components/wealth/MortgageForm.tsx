@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/Input'
+import { LabelledCurrencyInput } from '@/components/ui/CurrencyInput'
 import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
 
@@ -125,25 +126,19 @@ export function MortgageForm({ propertyId, initialValues, hasMortgage }: Props) 
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Input
+        <LabelledCurrencyInput
           label="Original Loan Amount"
-          type="number"
-          min="0"
-          step="1"
           required
-          placeholder="400000"
+          placeholder="400,000"
           value={values.originalAmount}
-          onChange={(e) => set('originalAmount', e.target.value)}
+          onChange={(v) => set('originalAmount', v)}
         />
-        <Input
+        <LabelledCurrencyInput
           label="Current Balance"
-          type="number"
-          min="0"
-          step="1"
           required
-          placeholder="350000"
+          placeholder="350,000"
           value={values.currentBalance}
-          onChange={(e) => set('currentBalance', e.target.value)}
+          onChange={(v) => set('currentBalance', v)}
         />
       </div>
 
@@ -159,15 +154,12 @@ export function MortgageForm({ propertyId, initialValues, hasMortgage }: Props) 
           value={values.interestRate}
           onChange={(e) => set('interestRate', e.target.value)}
         />
-        <Input
+        <LabelledCurrencyInput
           label="Repayment Amount"
-          type="number"
-          min="0"
-          step="1"
           required
-          placeholder="2500"
+          placeholder="2,500"
           value={values.repaymentAmount}
-          onChange={(e) => set('repaymentAmount', e.target.value)}
+          onChange={(v) => set('repaymentAmount', v)}
         />
         <Select
           label="Repayment Frequency"

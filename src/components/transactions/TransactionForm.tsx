@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/Input'
+import { LabelledCurrencyInput } from '@/components/ui/CurrencyInput'
 import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
 
@@ -141,23 +142,20 @@ export function TransactionForm({
             onChange={(e) => setQuantity(e.target.value)}
             placeholder="e.g. 100"
           />
-          <Input
+          <LabelledCurrencyInput
             label="Price per share ($)"
-            type="number"
-            step="any"
+            decimalScale={4}
             value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            placeholder="e.g. 45.50"
+            onChange={(v) => setPrice(v)}
+            placeholder="45.50"
           />
         </div>
       ) : (
         <div className="space-y-4">
-          <Input
+          <LabelledCurrencyInput
             label="Dividend Amount ($)"
-            type="number"
-            step="any"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={(v) => setAmount(v)}
             placeholder="Total cash received"
           />
           <Input
@@ -174,12 +172,10 @@ export function TransactionForm({
         </div>
       )}
 
-      <Input
+      <LabelledCurrencyInput
         label="Brokerage / Fees ($)"
-        type="number"
-        step="any"
         value={fees}
-        onChange={(e) => setFees(e.target.value)}
+        onChange={(v) => setFees(v)}
         placeholder="0"
       />
 

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/Input'
+import { LabelledCurrencyInput } from '@/components/ui/CurrencyInput'
 import { Button } from '@/components/ui/Button'
 
 interface FireSettingsValues {
@@ -120,26 +121,20 @@ export function FireSettingsForm({ initialValues }: Props) {
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Input
+        <LabelledCurrencyInput
           label="Annual Expenses in Retirement ($)"
-          type="number"
-          min="0"
-          step="100"
           required
-          placeholder="80000"
+          placeholder="80,000"
           hint="How much you want to spend per year in retirement"
           value={values.annualExpenses}
-          onChange={(e) => setStr('annualExpenses', e.target.value)}
+          onChange={(v) => setStr('annualExpenses', v)}
         />
-        <Input
+        <LabelledCurrencyInput
           label="Monthly Savings ($)"
-          type="number"
-          min="0"
-          step="100"
-          placeholder="3000"
+          placeholder="3,000"
           hint="Net monthly amount added to investable assets (excl. super)"
           value={values.monthlySavings}
-          onChange={(e) => setStr('monthlySavings', e.target.value)}
+          onChange={(v) => setStr('monthlySavings', v)}
         />
       </div>
 

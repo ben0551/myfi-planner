@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/Input'
+import { LabelledCurrencyInput } from '@/components/ui/CurrencyInput'
 import { Button } from '@/components/ui/Button'
 
 interface Props {
@@ -65,16 +66,13 @@ export function SuperReconcileForm({ accountId, currentBalance, currency, apiPat
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Input
+        <LabelledCurrencyInput
           label={`Balance (${currency})`}
-          type="number"
-          min="0"
-          step="1"
           required
           placeholder="0"
           hint="Enter the balance as shown on your statement"
           value={balance}
-          onChange={(e) => { setBalance(e.target.value); setSaved(false) }}
+          onChange={(v) => { setBalance(v); setSaved(false) }}
         />
         <Input
           label="Statement Date"

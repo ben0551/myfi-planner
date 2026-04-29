@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
+import { LabelledCurrencyInput } from '@/components/ui/CurrencyInput'
 
 interface Props {
   portfolioId: string
@@ -70,19 +71,13 @@ export function AddGoalForm({ portfolioId }: Props) {
             <option value="CONTRIBUTION">Total Contributions</option>
           </select>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Target Amount ($)</label>
-          <input
-            type="number"
-            value={targetValue}
-            onChange={(e) => setTargetValue(e.target.value)}
-            placeholder="500000"
-            min="0"
-            step="1000"
-            required
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </div>
+        <LabelledCurrencyInput
+          label="Target Amount ($)"
+          placeholder="500,000"
+          required
+          value={targetValue}
+          onChange={(v) => setTargetValue(v)}
+        />
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Target Date (optional)</label>
           <input

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { type BudgetRow, type BudgetGroup, GROUP_LABELS, BUDGET_GROUPS } from '@/lib/budget'
 import { Button } from '@/components/ui/Button'
+import { CurrencyInput } from '@/components/ui/CurrencyInput'
 
 interface Props {
   year: number
@@ -80,23 +81,17 @@ export function BudgetEntryForm({ year, month, initialRows }: Props) {
                     {row.name}
                   </span>
                   <div>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={row.budgeted || ''}
-                      onChange={(e) => update(row.categoryId, 'budgeted', e.target.value)}
+                    <CurrencyInput
+                      value={row.budgeted === 0 ? '' : String(row.budgeted)}
+                      onChange={(v) => update(row.categoryId, 'budgeted', v)}
                       placeholder="0"
                       className="w-full text-right text-sm px-2 py-1 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-400"
                     />
                   </div>
                   <div>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={row.actual || ''}
-                      onChange={(e) => update(row.categoryId, 'actual', e.target.value)}
+                    <CurrencyInput
+                      value={row.actual === 0 ? '' : String(row.actual)}
+                      onChange={(v) => update(row.categoryId, 'actual', v)}
                       placeholder="0"
                       className={`w-full text-right text-sm px-2 py-1 rounded-lg border focus:outline-none focus:ring-2 focus:ring-indigo-400 ${
                         over

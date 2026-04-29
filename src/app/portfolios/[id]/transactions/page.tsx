@@ -21,9 +21,14 @@ export default function TransactionsPage() {
             ← Back to portfolio
           </Link>
         </div>
-        <Link href={`/portfolios/${id}/transactions/new`}>
-          <Button>+ Add Transaction</Button>
-        </Link>
+        <div className="flex gap-2">
+          <Link href={`/portfolios/${id}/transactions/import`}>
+            <Button variant="secondary">Import CSV</Button>
+          </Link>
+          <Link href={`/portfolios/${id}/transactions/new`}>
+            <Button>+ Add Transaction</Button>
+          </Link>
+        </div>
       </div>
 
       <Card padding={false}>

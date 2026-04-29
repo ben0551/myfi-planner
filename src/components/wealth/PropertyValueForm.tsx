@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/Input'
+import { LabelledCurrencyInput } from '@/components/ui/CurrencyInput'
 import { Button } from '@/components/ui/Button'
 
 interface Props {
@@ -63,16 +64,13 @@ export function PropertyValueForm({ propertyId, currentValue, currency }: Props)
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Input
+        <LabelledCurrencyInput
           label={`Market Value (${currency})`}
-          type="number"
-          min="0"
-          step="1000"
           required
           placeholder="0"
           hint="Estimated market value at this date"
           value={value}
-          onChange={(e) => { setValue(e.target.value); setSaved(false) }}
+          onChange={(v) => { setValue(v); setSaved(false) }}
         />
         <Input
           label="Valuation Date"
