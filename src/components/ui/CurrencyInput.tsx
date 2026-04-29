@@ -44,10 +44,14 @@ export function CurrencyInput({
   decimalScale = 2,
   ...rest
 }: Props) {
+  const displayValue = typeof value === 'number'
+    ? (value === 0 ? '' : value)
+    : (value === '' ? '' : parseFloat(value) || '')
+
   return (
     <NumericFormat
       id={id}
-      value={value === 0 || value === '' ? '' : value}
+      value={displayValue}
       onValueChange={(v) => {
         if ('onNumberChange' in rest && rest.onNumberChange) {
           rest.onNumberChange(v.floatValue ?? 0)
@@ -86,7 +90,7 @@ export function LabelledCurrencyInput({ label, hint, value, onChange, placeholde
       </label>
       <NumericFormat
         id={id}
-        value={value === '' || value === '0' ? '' : value}
+        value={value === '' ? '' : parseFloat(value) || ''}
         onValueChange={(v) => onChange(v.value)}
         thousandSeparator=","
         decimalScale={decimalScale ?? 2}
