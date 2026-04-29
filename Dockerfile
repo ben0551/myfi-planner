@@ -51,5 +51,5 @@ ENV DATABASE_URL="file:/app/data/prod.db"
 
 EXPOSE 3000 2525
 
-# Run database migrations then start the server
-CMD ["sh", "-c", "npx prisma migrate deploy && node_modules/.bin/tsx server.ts"]
+# Sync schema and start the server
+CMD ["sh", "-c", "npx prisma db push && node_modules/.bin/tsx server.ts"]
