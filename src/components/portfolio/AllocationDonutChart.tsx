@@ -71,7 +71,8 @@ export function AllocationDonutChart({ data, currency, emptyMessage = 'No data' 
         </Pie>
         <Tooltip content={<CustomTooltip currency={currency} />} />
         <Legend
-          formatter={(value: string, entry: { payload?: Slice }) => (
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          formatter={(value: any, entry: any) => (
             <span className="text-xs text-gray-700">
               {value} <span className="text-gray-400">{entry.payload?.pct.toFixed(1)}%</span>
             </span>

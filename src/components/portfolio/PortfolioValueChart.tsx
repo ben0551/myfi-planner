@@ -81,7 +81,8 @@ export function PortfolioValueChart({ portfolioId, currency }: Props) {
         />
         <Tooltip
           labelFormatter={(label) => formatDate(label as string)}
-          formatter={(value: number, name: string) => [
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          formatter={(value: any, name: any) => [
             formatCurrency(value, currency),
             name === 'value' ? 'Market Value' : 'Invested',
           ]}

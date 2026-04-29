@@ -54,7 +54,8 @@ export function AllocationChart({ holdings, currency }: AllocationChartProps) {
           ))}
         </Pie>
         <Tooltip
-          formatter={(value: number, name: string) => [
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          formatter={(value: any, name: any) => [
             `${formatCurrency(value, currency)} (${((value / total) * 100).toFixed(1)}%)`,
             name,
           ]}
