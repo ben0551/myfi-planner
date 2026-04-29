@@ -34,6 +34,7 @@ services:
       PORT: "3000"
       SMTP_PORT: "2525"
       NEXTAUTH_URL: "https://${DOMAIN:-myfi.localhost}"
+      AUTH_TRUST_HOST: "true"
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
