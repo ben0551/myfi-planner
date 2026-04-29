@@ -83,6 +83,7 @@ model VerificationToken {
 model SiteSettings {
   id              Int     @id @default(1)
   requireApproval Boolean @default(false)
+  fmpApiKey       String?
 }
 
 // ── App models ───────────────────────────────────────────────────────────────

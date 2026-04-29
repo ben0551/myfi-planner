@@ -19,10 +19,14 @@ export async function PATCH(request: NextRequest) {
   if (denied) return denied
 
   const body = await request.json()
+  const update: Record<string, unknown> = {}
+  if ('requireApproval' in body) update.requireApproval = Boolean(body.requireApproval)
+  if ('fmpApiKey' in body) update.fmpApiKey = body.fmpApiKey || null
+
   const settings = await prisma.siteSettings.upsert({
     where: { id: 1 },
-    update: { requireApproval: Boolean(body.requireApproval) },
-    create: { id: 1, requireApproval: Boolean(body.requireApproval) },
+    update,
+    create: { id: 1, requireApproval: false, ...update },
   })
   return Response.json(settings)
 }

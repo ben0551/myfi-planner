@@ -19,7 +19,7 @@ export default async function AdminSettingsPage() {
         <h1 className="text-2xl font-bold text-gray-900">Site Settings</h1>
         <p className="mt-1 text-sm text-gray-500">Configure global application settings.</p>
       </div>
-      <SettingsForm requireApproval={settings.requireApproval} />
+      <SettingsForm requireApproval={settings.requireApproval} fmpApiKey={settings.fmpApiKey ?? ''} />
     </div>
   )
 }
