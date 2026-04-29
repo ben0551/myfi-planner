@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Force dark: variants to respond to the .dark class (next-themes), not OS media query */
+@variant dark (&:where(.dark, .dark *));
+
 /* ══════════════════════════════════════════════════════════════════════════
    ACCENT COLOUR THEMING
    Map the entire indigo scale to CSS variables so every existing

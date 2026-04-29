@@ -159,6 +159,61 @@ function UserDropdown({ session, isAdmin }: { session: { user: { name?: string |
   )
 }
 
+function MobileMenu({ pathname }: { pathname: string }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useClickOutside(ref, () => setOpen(false))
+
+  const allItems = [
+    ...leftItems.map((i) => ({ ...i, icon: '' })),
+    ...financeItems,
+    ...rightItems.map((i) => ({ ...i, icon: '' })),
+  ]
+
+  return (
+    <div ref={ref} className="md:hidden relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+        aria-label="Menu"
+      >
+        {open ? (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        ) : (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-11 w-56 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-xl py-1.5 z-50">
+          {allItems.map((item) => {
+            const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href)
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setOpen(false)}
+                className={`flex items-center gap-2.5 px-3.5 py-2.5 text-sm transition-colors ${
+                  active
+                    ? 'text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40'
+                    : 'text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700/50'
+                }`}
+              >
+                {item.icon && <span className="text-base">{item.icon}</span>}
+                {item.label}
+              </Link>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function Navbar() {
   const pathname = usePathname()
   const { data: session } = useSession()
@@ -221,6 +276,7 @@ export function Navbar() {
             {session?.user && (
               <UserDropdown session={session} isAdmin={isAdmin} />
             )}
+            <MobileMenu pathname={pathname} />
           </div>
 
         </div>
