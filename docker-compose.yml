@@ -1,14 +1,32 @@
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: myfi
+      POSTGRES_USER: myfi
+      POSTGRES_PASSWORD: "${DB_PASSWORD}"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myfi"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   app:
     build: .
+    depends_on:
+      db:
+        condition: service_healthy
     expose:
       - "3000"
     ports:
       - "${SMTP_PORT:-2525}:2525"   # SMTP email ingest (direct, not proxied)
     volumes:
-      - myfi_data:/app/data         # SQLite database persistence
+      - app_data:/app/data          # kept for any file uploads etc.
     environment:
-      DATABASE_URL: "file:/app/data/prod.db"
+      DATABASE_URL: "postgresql://myfi:${DB_PASSWORD}@db:5432/myfi"
       AUTH_SECRET: "${AUTH_SECRET}"
       ADMIN_EMAIL: "${ADMIN_EMAIL:-admin@localhost}"
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:-changeme123}"
@@ -16,7 +34,6 @@ services:
       PORT: "3000"
       SMTP_PORT: "2525"
       NEXTAUTH_URL: "https://${DOMAIN:-myfi.localhost}"
-      # Optional AI keys — leave blank to disable
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
@@ -29,18 +46,14 @@ services:
       start_period: 40s
     labels:
       - "traefik.enable=true"
-      # HTTP router — redirect to HTTPS
       - "traefik.http.routers.myfi-http.rule=Host(`${DOMAIN:-myfi.localhost}`)"
       - "traefik.http.routers.myfi-http.entrypoints=web"
       - "traefik.http.routers.myfi-http.middlewares=redirect-to-https"
-      # HTTPS router
       - "traefik.http.routers.myfi.rule=Host(`${DOMAIN:-myfi.localhost}`)"
       - "traefik.http.routers.myfi.entrypoints=websecure"
       - "traefik.http.routers.myfi.tls=true"
       - "traefik.http.routers.myfi.tls.certresolver=letsencrypt"
-      # Service — point Traefik at the app port
       - "traefik.http.services.myfi.loadbalancer.server.port=3000"
-      # Shared HTTPS redirect middleware
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
     networks:
@@ -48,9 +61,11 @@ services:
       - default
 
 volumes:
-  myfi_data:
+  pg_data:
+    driver: local
+  app_data:
     driver: local
 
 networks:
   traefik_proxy:
-    external: true   # Must already exist — created by your Traefik stack
+    external: true

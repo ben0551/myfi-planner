@@ -47,15 +47,15 @@ export async function POST(request: NextRequest) {
 
   // Find latest HistoricalPrice date per ticker (ASX source)
   const latestByTicker = new Map<string, Date>()
-  const latestRows = await prisma.$queryRaw<{ ticker: string; maxDate: string }[]>`
+  const latestRows = await prisma.$queryRaw<{ ticker: string; maxdate: Date }[]>`
     SELECT ticker, MAX(date) as maxDate
-    FROM HistoricalPrice
-    WHERE source = 'ASX' AND ticker IN (${tickers.join("','").replace(/^/, "'").replace(/$/, "'")})
+    FROM "HistoricalPrice"
+    WHERE source = 'ASX' AND ticker = ANY(${tickers})
     GROUP BY ticker
-  `.catch(() => [] as { ticker: string; maxDate: string }[])
+  `.catch(() => [] as { ticker: string; maxdate: Date }[])
 
   for (const row of latestRows) {
-    latestByTicker.set(row.ticker, new Date(row.maxDate))
+    latestByTicker.set(row.ticker, new Date(row.maxdate))
   }
 
   // Price cache staleness check (>60 min)

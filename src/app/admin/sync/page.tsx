@@ -13,12 +13,12 @@ export default async function AdminSyncPage() {
   const tickerRows = await prisma.transaction.findMany({ distinct: ['ticker'], select: { ticker: true } })
   const tickers = [...new Set(tickerRows.map((r) => r.ticker.toUpperCase()))].sort()
 
-  const historySummary = await prisma.$queryRaw<{ ticker: string; cnt: bigint; minDate: bigint; maxDate: bigint }[]>`
+  const historySummary = await prisma.$queryRaw<{ ticker: string; cnt: bigint; mindate: Date; maxdate: Date }[]>`
     SELECT ticker, COUNT(*) as cnt, MIN(date) as minDate, MAX(date) as maxDate
-    FROM HistoricalPrice
+    FROM "HistoricalPrice"
     WHERE source = 'ASX'
     GROUP BY ticker
-  `.catch(() => [] as { ticker: string; cnt: bigint; minDate: bigint; maxDate: bigint }[])
+  `.catch(() => [] as { ticker: string; cnt: bigint; mindate: Date; maxdate: Date }[])
 
   const historyMap = new Map(historySummary.map((r) => [r.ticker, r]))
   const priceCacheCount = await prisma.priceCache.count()
@@ -28,8 +28,8 @@ export default async function AdminSyncPage() {
     return {
       ticker: t,
       points: h ? Number(h.cnt) : 0,
-      from: h?.minDate ? new Date(Number(h.minDate)).toISOString().split('T')[0] : null,
-      to: h?.maxDate ? new Date(Number(h.maxDate)).toISOString().split('T')[0] : null,
+      from: h?.mindate ? new Date(h.mindate).toISOString().split('T')[0] : null,
+      to: h?.maxdate ? new Date(h.maxdate).toISOString().split('T')[0] : null,
     }
   })
 
