@@ -16,6 +16,7 @@ const financeItems = [
   { href: '/tax', label: 'Tax', icon: '🧾' },
   { href: '/watchlist', label: 'Watchlist', icon: '👁' },
   { href: '/transactions', label: 'Transactions', icon: '🔍' },
+  { href: '/bank-import', label: 'Bank Import', icon: '📥' },
 ]
 
 const leftItems = [
