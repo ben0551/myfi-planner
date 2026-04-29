@@ -104,8 +104,26 @@ export async function GET(
     assetClasses: c.assetClasses ? (JSON.parse(c.assetClasses) as { name: string; pct: number }[]) : [],
   }]))
 
+  // FMP fundamentals stored in MarketIndexSnapshot — use as primary sector/industry source
+  const fmpSnapshots = await prisma.marketIndexSnapshot.findMany({
+    where: { ticker: { in: tickers } },
+    select: { ticker: true, sector: true, industry: true },
+  })
+  const fmpProfileMap = new Map(fmpSnapshots.map((s) => [s.ticker, s]))
+
   const holdings = buildHoldings(transactions, priceMap)
   const totalValue = holdings.reduce((s, h) => s + (h.currentValue ?? 0), 0)
+
+  // Effective sector for a ticker: manual → FMP → Yahoo profile
+  function getEffectiveSector(ticker: string): string | null {
+    const manual = manualMap.get(ticker)
+    if (manual?.industries.length) return null // handled via sectorWeights
+    return fmpProfileMap.get(ticker)?.sector ?? profileMap.get(ticker)?.sector ?? null
+  }
+
+  function getEffectiveIndustry(ticker: string): string | null {
+    return fmpProfileMap.get(ticker)?.industry ?? profileMap.get(ticker)?.industry ?? null
+  }
 
   // Helper: get effective sector/region weights for a ticker
   // Manual classification wins → Yahoo ETF look-through → Yahoo stock profile
@@ -145,7 +163,7 @@ export async function GET(
         sectorMap.set(sw.sector, (sectorMap.get(sw.sector) ?? 0) + portion)
       }
     } else {
-      const sector = profileMap.get(h.ticker)?.sector ?? 'Unknown'
+      const sector = getEffectiveSector(h.ticker) ?? 'Unknown'
       sectorMap.set(sector, (sectorMap.get(sector) ?? 0) + value)
     }
   }
@@ -219,8 +237,8 @@ export async function GET(
       sectorWeights: effectiveSectorWeights,
       regionWeights: effectiveRegionWeights,
       // Fallback stock-level data
-      sector: profile?.sector ?? null,
-      industry: profile?.industry ?? null,
+      sector: getEffectiveSector(h.ticker),
+      industry: getEffectiveIndustry(h.ticker),
       country: profile?.country ?? null,
       beta: profile?.beta ?? null,
     }

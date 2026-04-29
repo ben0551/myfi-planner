@@ -327,7 +327,7 @@ export function SyncPricesPanel({ tickers, coverage, priceCacheCount, fundamenta
                       <td className="py-2 text-right text-gray-700">{f?.marketCap ?? <span className="text-gray-300">—</span>}</td>
                       <td className="py-2 text-right text-gray-700">{f?.peRatio != null ? f.peRatio.toFixed(1) : <span className="text-gray-300">—</span>}</td>
                       <td className="py-2 text-right text-gray-700">{f?.eps != null ? `$${f.eps.toFixed(3)}` : <span className="text-gray-300">—</span>}</td>
-                      <td className="py-2 text-right text-gray-700">{f?.dividendYield != null ? `${(f.dividendYield * 100).toFixed(2)}%` : <span className="text-gray-300">—</span>}</td>
+                      <td className="py-2 text-right text-gray-700">{f?.dividendYield != null ? `${f.dividendYield.toFixed(2)}%` : <span className="text-gray-300">—</span>}</td>
                       <td className="py-2 text-right text-gray-700">{extras.roe != null ? `${(extras.roe * 100).toFixed(1)}%` : <span className="text-gray-300">—</span>}</td>
                       <td className="py-2 text-right text-gray-700">{extras.netMargin != null ? `${(extras.netMargin * 100).toFixed(1)}%` : <span className="text-gray-300">—</span>}</td>
                       <td className="py-2 text-gray-400">{f ? new Date(f.fetchedAt).toLocaleDateString('en-AU') : <span className="text-gray-300">Never</span>}</td>
