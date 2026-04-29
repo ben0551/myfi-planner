@@ -1,0 +1,199 @@
+'use client'
+
+import { useState } from 'react'
+
+interface CoverageRow {
+  ticker: string
+  points: number
+  from: string | null
+  to: string | null
+}
+
+interface Props {
+  tickers: string[]
+  coverage: CoverageRow[]
+  priceCacheCount: number
+}
+
+interface SyncResult {
+  tickers: number
+  synced: number
+  updated: number
+  skipped: number
+  errors: number
+  errorDetails?: string[]
+}
+
+export function SyncPricesPanel({ tickers, coverage, priceCacheCount }: Props) {
+  const [running, setRunning] = useState(false)
+  const [result, setResult] = useState<SyncResult | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function runSync(subset?: string[]) {
+    setRunning(true)
+    setResult(null)
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/sync-prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(subset ? { tickers: subset } : {}),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Unknown error' }))
+        setError(err.error ?? 'Sync failed')
+        return
+      }
+      const data = await res.json()
+      setResult(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Network error')
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  const missingSome = coverage.filter((c) => c.points === 0)
+  const today = new Date().toISOString().split('T')[0]
+  const stale = coverage.filter((c) => c.to && c.to < today && c.points > 0)
+
+  return (
+    <div className="space-y-6">
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <StatCard label="Portfolio Tickers" value={tickers.length} />
+        <StatCard label="With History" value={coverage.filter((c) => c.points > 0).length} />
+        <StatCard label="Missing History" value={missingSome.length} color={missingSome.length > 0 ? 'amber' : 'gray'} />
+        <StatCard label="Price Cache Entries" value={priceCacheCount} />
+      </div>
+
+      {/* Action buttons */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+        <h2 className="text-sm font-semibold text-gray-700 mb-4">Sync Actions</h2>
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={() => runSync()}
+            disabled={running}
+            className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {running ? 'Syncing…' : 'Sync All Tickers'}
+          </button>
+          {missingSome.length > 0 && (
+            <button
+              onClick={() => runSync(missingSome.map((c) => c.ticker))}
+              disabled={running}
+              className="px-4 py-2 bg-amber-500 text-white text-sm font-medium rounded-lg hover:bg-amber-600 disabled:opacity-50 transition-colors"
+            >
+              Sync {missingSome.length} Missing Only
+            </button>
+          )}
+          {stale.length > 0 && (
+            <button
+              onClick={() => runSync(stale.map((c) => c.ticker))}
+              disabled={running}
+              className="px-4 py-2 bg-sky-500 text-white text-sm font-medium rounded-lg hover:bg-sky-600 disabled:opacity-50 transition-colors"
+            >
+              Update {stale.length} Stale
+            </button>
+          )}
+        </div>
+
+        {running && (
+          <div className="mt-4 flex items-center gap-2 text-sm text-indigo-600">
+            <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+            </svg>
+            Fetching price history from Yahoo Finance… this may take a minute for large portfolios.
+          </div>
+        )}
+
+        {result && (
+          <div className="mt-4 rounded-lg bg-green-50 border border-green-200 p-4">
+            <p className="text-sm font-semibold text-green-800 mb-2">Sync complete</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+              <div><span className="text-gray-500">Tickers:</span> <strong>{result.tickers}</strong></div>
+              <div><span className="text-gray-500">Full fetch:</span> <strong className="text-indigo-700">{result.synced}</strong></div>
+              <div><span className="text-gray-500">Updated:</span> <strong className="text-sky-700">{result.updated}</strong></div>
+              <div><span className="text-gray-500">Skipped:</span> <strong>{result.skipped}</strong></div>
+              {result.errors > 0 && (
+                <div className="col-span-full">
+                  <span className="text-red-600 font-medium">{result.errors} errors</span>
+                  {result.errorDetails && (
+                    <ul className="mt-1 text-xs text-red-500 space-y-0.5">
+                      {result.errorDetails.slice(0, 10).map((e, i) => <li key={i}>{e}</li>)}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="mt-4 rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+      </div>
+
+      {/* Coverage table */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100">
+          <h2 className="text-sm font-semibold text-gray-700">History Coverage</h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 text-left text-xs text-gray-500 uppercase tracking-wide">
+                <th className="px-6 py-3 font-medium">Ticker</th>
+                <th className="px-4 py-3 font-medium text-right">Data Points</th>
+                <th className="px-4 py-3 font-medium">From</th>
+                <th className="px-4 py-3 font-medium">To</th>
+                <th className="px-4 py-3 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {coverage.map((c) => {
+                const isStale = c.to && c.to < today && c.points > 0
+                const isMissing = c.points === 0
+                return (
+                  <tr key={c.ticker} className="hover:bg-gray-50">
+                    <td className="px-6 py-3 font-semibold text-gray-900">{c.ticker}</td>
+                    <td className="px-4 py-3 text-right text-gray-600">{c.points > 0 ? c.points.toLocaleString() : <span className="text-gray-300">—</span>}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">{c.from ?? <span className="text-gray-300">—</span>}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">{c.to ?? <span className="text-gray-300">—</span>}</td>
+                    <td className="px-4 py-3">
+                      {isMissing ? (
+                        <span className="text-xs rounded-full bg-amber-100 text-amber-700 px-2 py-0.5">No data</span>
+                      ) : isStale ? (
+                        <span className="text-xs rounded-full bg-sky-100 text-sky-700 px-2 py-0.5">Stale</span>
+                      ) : (
+                        <span className="text-xs rounded-full bg-green-100 text-green-700 px-2 py-0.5">Up to date</span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function StatCard({ label, value, color = 'gray' }: { label: string; value: number; color?: string }) {
+  const colorMap: Record<string, string> = {
+    gray: 'text-gray-900',
+    amber: 'text-amber-700',
+    green: 'text-green-700',
+    indigo: 'text-indigo-700',
+  }
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className={`text-2xl font-bold mt-1 ${colorMap[color] ?? 'text-gray-900'}`}>{value}</p>
+    </div>
+  )
+}

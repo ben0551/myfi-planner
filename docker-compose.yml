@@ -1,0 +1,31 @@
+services:
+  app:
+    build: .
+    ports:
+      - "${PORT:-3000}:3000"       # Next.js web app
+      - "${SMTP_PORT:-2525}:2525"  # SMTP email ingest
+    volumes:
+      - myfi_data:/app/data        # SQLite database persistence
+    environment:
+      DATABASE_URL: "file:/app/data/prod.db"
+      AUTH_SECRET: "${AUTH_SECRET}"
+      ADMIN_EMAIL: "${ADMIN_EMAIL:-admin@localhost}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-changeme123}"
+      NODE_ENV: production
+      PORT: "3000"
+      SMTP_PORT: "2525"
+      # Optional AI keys — leave blank to disable
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  myfi_data:
+    driver: local

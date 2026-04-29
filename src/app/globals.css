@@ -1,26 +1,254 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* ══════════════════════════════════════════════════════════════════════════
+   ACCENT COLOUR THEMING
+   Map the entire indigo scale to CSS variables so every existing
+   bg-indigo-*, text-indigo-*, border-indigo-* utility auto-adapts.
+   ══════════════════════════════════════════════════════════════════════════ */
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-indigo-50:  var(--accent-50);
+  --color-indigo-100: var(--accent-100);
+  --color-indigo-200: var(--accent-200);
+  --color-indigo-300: var(--accent-300);
+  --color-indigo-400: var(--accent-400);
+  --color-indigo-500: var(--accent-500);
+  --color-indigo-600: var(--accent-600);
+  --color-indigo-700: var(--accent-700);
+  --color-indigo-800: var(--accent-800);
+  --color-indigo-900: var(--accent-900);
+  --color-indigo-950: var(--accent-950);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ── Default theme: Classic Indigo ───────────────────────────────────────── */
+:root {
+  --accent-50:  #eef2ff;
+  --accent-100: #e0e7ff;
+  --accent-200: #c7d2fe;
+  --accent-300: #a5b4fc;
+  --accent-400: #818cf8;
+  --accent-500: #6366f1;
+  --accent-600: #4f46e5;
+  --accent-700: #4338ca;
+  --accent-800: #3730a3;
+  --accent-900: #312e81;
+  --accent-950: #1e1b4b;
+}
+
+/* ── Wall Street (Gold / Amber) ──────────────────────────────────────────── */
+[data-theme="gold"] {
+  --accent-50:  #fffbeb;
+  --accent-100: #fef3c7;
+  --accent-200: #fde68a;
+  --accent-300: #fcd34d;
+  --accent-400: #fbbf24;
+  --accent-500: #f59e0b;
+  --accent-600: #d97706;
+  --accent-700: #b45309;
+  --accent-800: #92400e;
+  --accent-900: #78350f;
+  --accent-950: #451a03;
+}
+
+/* ── Bull Market (Emerald Green) ─────────────────────────────────────────── */
+[data-theme="emerald"] {
+  --accent-50:  #ecfdf5;
+  --accent-100: #d1fae5;
+  --accent-200: #a7f3d0;
+  --accent-300: #6ee7b7;
+  --accent-400: #34d399;
+  --accent-500: #10b981;
+  --accent-600: #059669;
+  --accent-700: #047857;
+  --accent-800: #065f46;
+  --accent-900: #064e3b;
+  --accent-950: #022c22;
+}
+
+/* ── Fox (Orange) ────────────────────────────────────────────────────────── */
+[data-theme="orange"] {
+  --accent-50:  #fff7ed;
+  --accent-100: #ffedd5;
+  --accent-200: #fed7aa;
+  --accent-300: #fdba74;
+  --accent-400: #fb923c;
+  --accent-500: #f97316;
+  --accent-600: #ea580c;
+  --accent-700: #c2410c;
+  --accent-800: #9a3412;
+  --accent-900: #7c2d12;
+  --accent-950: #431407;
+}
+
+/* ── Dolphin (Cyan / Ocean) ──────────────────────────────────────────────── */
+[data-theme="cyan"] {
+  --accent-50:  #ecfeff;
+  --accent-100: #cffafe;
+  --accent-200: #a5f3fc;
+  --accent-300: #67e8f9;
+  --accent-400: #22d3ee;
+  --accent-500: #06b6d4;
+  --accent-600: #0891b2;
+  --accent-700: #0e7490;
+  --accent-800: #155e75;
+  --accent-900: #164e63;
+  --accent-950: #083344;
+}
+
+/* ── Flamingo (Rose / Pink) ──────────────────────────────────────────────── */
+[data-theme="rose"] {
+  --accent-50:  #fff1f2;
+  --accent-100: #ffe4e6;
+  --accent-200: #fecdd3;
+  --accent-300: #fda4af;
+  --accent-400: #fb7185;
+  --accent-500: #f43f5e;
+  --accent-600: #e11d48;
+  --accent-700: #be123c;
+  --accent-800: #9f1239;
+  --accent-900: #881337;
+  --accent-950: #4c0519;
+}
+
+/* ── Night Owl (Violet) ──────────────────────────────────────────────────── */
+[data-theme="violet"] {
+  --accent-50:  #f5f3ff;
+  --accent-100: #ede9fe;
+  --accent-200: #ddd6fe;
+  --accent-300: #c4b5fd;
+  --accent-400: #a78bfa;
+  --accent-500: #8b5cf6;
+  --accent-600: #7c3aed;
+  --accent-700: #6d28d9;
+  --accent-800: #5b21b6;
+  --accent-900: #4c1d95;
+  --accent-950: #2e1065;
+}
+
+/* ── Wolf (Slate / Monochrome) ───────────────────────────────────────────── */
+[data-theme="slate"] {
+  --accent-50:  #f8fafc;
+  --accent-100: #f1f5f9;
+  --accent-200: #e2e8f0;
+  --accent-300: #cbd5e1;
+  --accent-400: #94a3b8;
+  --accent-500: #64748b;
+  --accent-600: #475569;
+  --accent-700: #334155;
+  --accent-800: #1e293b;
+  --accent-900: #0f172a;
+  --accent-950: #020617;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LIGHT / DARK MODE
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: #f1f5f9;
+  color: #0f172a;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
+
+.dark {
+  color-scheme: dark;
+}
+
+.dark body {
+  background: #0f172a;
+  color: #f1f5f9;
+}
+
+/* ── Gray utility overrides for dark mode ────────────────────────────────── */
+
+.dark .bg-white       { background-color: #1e293b; }
+.dark .bg-gray-50     { background-color: #0f172a; }
+.dark .bg-gray-100    { background-color: #1e293b; }
+.dark .bg-gray-200    { background-color: #334155; }
+
+.dark .border-gray-100 { border-color: #1e293b; }
+.dark .border-gray-200 { border-color: #334155; }
+.dark .border-gray-300 { border-color: #475569; }
+
+.dark .text-gray-900 { color: #f1f5f9; }
+.dark .text-gray-800 { color: #e2e8f0; }
+.dark .text-gray-700 { color: #cbd5e1; }
+.dark .text-gray-600 { color: #94a3b8; }
+.dark .text-gray-500 { color: #64748b; }
+.dark .text-gray-400 { color: #475569; }
+
+.dark .divide-gray-100 > * + * { border-color: #1e293b; }
+.dark .divide-gray-200 > * + * { border-color: #334155; }
+
+/* ── Accent colour overrides for dark mode ───────────────────────────────── */
+/* Lighten the darkest accent shades so they're readable on dark surfaces.
+   Uses CSS variables so these work correctly for every colour theme.        */
+
+.dark .text-indigo-800,
+.dark .text-indigo-700 { color: var(--accent-300); }
+
+.dark .bg-indigo-50 {
+  background-color: color-mix(in srgb, var(--accent-950) 60%, transparent);
+}
+
+.dark .border-indigo-200 { border-color: var(--accent-700); }
+.dark .border-indigo-300 { border-color: var(--accent-600); }
+
+/* ── Status / tint backgrounds ───────────────────────────────────────────── */
+
+.dark .bg-green-50    { background-color: rgb(5 46 22 / 0.5); }
+.dark .bg-emerald-50  { background-color: rgb(5 46 22 / 0.5); }
+.dark .bg-amber-50    { background-color: rgb(69 26 3 / 0.5); }
+.dark .bg-red-50      { background-color: rgb(69 10 10 / 0.5); }
+.dark .bg-sky-50      { background-color: rgb(8 47 73 / 0.5); }
+.dark .bg-violet-50   { background-color: rgb(46 16 101 / 0.4); }
+.dark .bg-blue-50     { background-color: rgb(23 37 84 / 0.5); }
+
+.dark .border-green-200  { border-color: #166534; }
+.dark .border-green-300  { border-color: #15803d; }
+.dark .border-emerald-200 { border-color: #166534; }
+.dark .border-amber-200  { border-color: #92400e; }
+.dark .border-red-200    { border-color: #991b1b; }
+
+.dark .text-green-800  { color: #86efac; }
+.dark .text-green-700  { color: #86efac; }
+.dark .text-emerald-800 { color: #6ee7b7; }
+.dark .text-emerald-700 { color: #6ee7b7; }
+.dark .text-amber-800  { color: #fcd34d; }
+.dark .text-amber-700  { color: #fcd34d; }
+.dark .text-red-700    { color: #fca5a5; }
+.dark .text-red-600    { color: #fca5a5; }
+.dark .text-sky-700    { color: #7dd3fc; }
+.dark .text-violet-700 { color: #c4b5fd; }
+
+/* ── Form elements ───────────────────────────────────────────────────────── */
+
+.dark input,
+.dark select,
+.dark textarea {
+  background-color: #0f172a;
+  color: #f1f5f9;
+  border-color: #475569;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder { color: #64748b; }
+
+.dark input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); }
+
+/* ── Misc ────────────────────────────────────────────────────────────────── */
+
+.dark .hover\:bg-gray-50:hover { background-color: #1e293b; }
+
+/* ── Recharts in dark mode ───────────────────────────────────────────────── */
+.dark .recharts-cartesian-grid line { stroke: #334155; }
+.dark .recharts-text { fill: #64748b; }
+
+/* ── Scrollbar ───────────────────────────────────────────────────────────── */
+.dark ::-webkit-scrollbar-track  { background: #1e293b; }
+.dark ::-webkit-scrollbar-thumb  { background: #475569; border-radius: 4px; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #64748b; }

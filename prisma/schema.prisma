@@ -1,0 +1,509 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ── Auth models ──────────────────────────────────────────────────────────────
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  name         String?
+  passwordHash String
+  role         String     @default("USER")   // "USER" | "ADMIN"
+  status       String     @default("ACTIVE") // "PENDING" | "ACTIVE" | "DISABLED"
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  accounts            Account[]
+  sessions            Session[]
+  portfolios          Portfolio[]
+  priceAlerts         PriceAlert[]
+  pendingTransactions PendingTransaction[]
+  properties          Property[]
+  superAccounts       SuperAccount[]
+  cashAccounts        CashAccount[]
+  fireSettings        FireSettings?
+  aiSettings          AISettings?
+  netWorthSnapshots        NetWorthSnapshot[]
+  anticipatedInheritances  AnticipatedInheritance[]
+  budgetCategories    BudgetCategory[]
+  budgets             Budget[]
+  budgetActuals       BudgetActual[]
+}
+
+model AISettings {
+  id       String  @id @default(cuid())
+  userId   String  @unique
+  provider String  @default("anthropic") // anthropic | openai | gemini | ollama
+  model    String?
+  apiKey   String?
+  baseUrl  String?
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model SiteSettings {
+  id              Int     @id @default(1)
+  requireApproval Boolean @default(false)
+}
+
+// ── App models ───────────────────────────────────────────────────────────────
+
+model Portfolio {
+  id                  String               @id @default(cuid())
+  name                String
+  description         String?
+  currency            String               @default("AUD")
+  userId              String
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions        Transaction[]
+  pendingTransactions PendingTransaction[]
+  priceAlerts         PriceAlert[]
+  snapshots           PortfolioSnapshot[]
+  goals               Goal[]
+
+  @@index([userId])
+}
+
+model Goal {
+  id          String    @id @default(cuid())
+  portfolioId String
+  name        String
+  type        String    @default("VALUE") // "VALUE" | "CONTRIBUTION"
+  targetValue Float
+  targetDate  DateTime?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@index([portfolioId])
+}
+
+model Transaction {
+  id          String          @id @default(cuid())
+  portfolioId String
+  type        TransactionType
+  ticker      String
+  date        DateTime
+  quantity    Decimal
+  price       Decimal
+  fees        Decimal         @default(0)
+  amount      Decimal?
+  frankingPct Float           @default(0)  // DIVIDEND only; 0–100
+  notes       String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  portfolio   Portfolio       @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@index([portfolioId])
+  @@index([ticker])
+}
+
+enum TransactionType {
+  BUY
+  SELL
+  DIVIDEND
+}
+
+model PendingTransaction {
+  id              String     @id @default(cuid())
+  source          String
+  rawContent      String
+  fromAddress     String?
+  receivedAt      DateTime   @default(now())
+  transactionType String?
+  ticker          String?
+  quantity        Float?
+  price           Float?
+  fees            Float?
+  currency        String?    @default("AUD")
+  tradeDate       DateTime?
+  parseConfidence Float?
+  parseWarnings   String?
+  status          String     @default("PENDING")
+  confirmedAt     DateTime?
+  rejectedAt      DateTime?
+  transactionId   String?    @unique
+  portfolioId     String?
+  userId          String?
+  portfolio       Portfolio? @relation(fields: [portfolioId], references: [id])
+  user            User?      @relation(fields: [userId], references: [id])
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
+/// Manual look-through classification for a ticker — stored globally (not per user).
+/// JSON fields store [{name: string, pct: number}] arrays.
+model TickerClassification {
+  ticker         String   @id
+  instrumentType String?  // STOCK | ETF | FUND | BOND | OTHER
+  riskCategory   String?  // LOW | MEDIUM | HIGH
+  assetClasses   String?  // JSON [{name,pct}]
+  industries     String?  // JSON [{name,pct}]  — GICS sectors
+  regions        String?  // JSON [{name,pct}]  — geographic weights
+  customGroups   String?  // JSON [{name,pct}]
+  notes          String?
+  updatedAt      DateTime @updatedAt
+}
+
+model PriceCache {
+  ticker           String   @id
+  price            Decimal
+  currency         String
+  change           Decimal?
+  changePct        Decimal?
+  marketTime       DateTime
+  fetchedAt        DateTime @default(now())
+  source           String   @default("ASX")
+  companyName      String?
+  fiftyTwoWeekHigh Decimal?
+  fiftyTwoWeekLow  Decimal?
+  sector           String?
+  industry         String?
+  country          String?
+  beta             Float?
+
+  @@index([fetchedAt])
+}
+
+model PriceAlert {
+  id             String     @id @default(cuid())
+  ticker         String
+  targetPrice    Float
+  direction      String
+  note           String?
+  isTriggered    Boolean    @default(false)
+  triggeredAt    DateTime?
+  triggeredPrice Float?
+  portfolioId    String?
+  userId         String
+  portfolio      Portfolio? @relation(fields: [portfolioId], references: [id])
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@index([userId])
+}
+
+model Announcement {
+  id              String   @id @default(cuid())
+  ticker          String
+  asxId           String   @unique
+  title           String
+  url             String
+  marketSensitive Boolean  @default(false)
+  releasedAt      DateTime
+  category        String?
+  fetchedAt       DateTime @default(now())
+
+  @@index([ticker])
+}
+
+/// Scraped snapshot from MarketIndex — one row per ticker, updated on each visit.
+model MarketIndexSnapshot {
+  ticker        String   @id
+  fetchedAt     DateTime @default(now())
+  price         Float?
+  change        Float?
+  changePct     Float?
+  volume        String?
+  marketCap     String?
+  peRatio       Float?
+  eps           Float?
+  dividendYield Float?
+  dividendAmount Float?
+  frankingPct   Int?
+  high52Week    Float?
+  low52Week     Float?
+  sector        String?
+  industry      String?
+  companyName   String?
+  extras        String?  // JSON blob for any additional parsed fields
+  updatedAt     DateTime @updatedAt
+
+  @@index([fetchedAt])
+}
+
+model HistoricalPrice {
+  id     String   @id @default(cuid())
+  ticker String
+  date   DateTime
+  open   Float?
+  high   Float?
+  low    Float?
+  close  Float
+  volume BigInt?
+  source String   @default("ASX")
+
+  @@unique([ticker, date, source])
+  @@index([ticker])
+}
+
+model PortfolioSnapshot {
+  id          String    @id @default(cuid())
+  portfolioId String
+  date        DateTime
+  value       Float
+  invested    Float
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@unique([portfolioId, date])
+  @@index([portfolioId])
+}
+
+// ── Wealth models ─────────────────────────────────────────────────────────────
+
+model Property {
+  id            String                 @id @default(cuid())
+  userId        String
+  name          String
+  address       String?
+  type          String                 @default("RESIDENTIAL") // RESIDENTIAL | INVESTMENT | LAND | COMMERCIAL
+  purchasePrice Float
+  purchaseDate  DateTime
+  currentValue  Float
+  ownershipPct  Float                  @default(100)           // 0–100
+  currency      String                 @default("AUD")
+  notes         String?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  user          User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mortgage      Mortgage?
+  valueHistory  PropertyValueHistory[]
+
+  @@index([userId])
+}
+
+model PropertyValueHistory {
+  id         String   @id @default(cuid())
+  propertyId String
+  date       DateTime
+  value      Float
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, date])
+  @@index([propertyId])
+}
+
+model Mortgage {
+  id               String   @id @default(cuid())
+  propertyId       String   @unique
+  userId           String
+  lender           String
+  originalAmount   Float
+  currentBalance   Float
+  interestRate     Float                          // annual %
+  loanType         String   @default("PI")        // PI | IO
+  repaymentAmount  Float
+  repaymentFreq    String   @default("MONTHLY")   // WEEKLY | FORTNIGHTLY | MONTHLY
+  startDate        DateTime
+  termYears        Int
+  currency         String   @default("AUD")
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  property         Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+}
+
+model SuperAccount {
+  id                 String               @id @default(cuid())
+  userId             String
+  fundName           String
+  accountNumber      String?
+  currentBalance     Float
+  employerContribPct Float                @default(11.5)
+  employeeContribPct Float                @default(0)
+  currency           String               @default("AUD")
+  notes              String?
+  balanceUpdatedAt   DateTime             @default(now())
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balanceHistory     SuperBalanceHistory[]
+
+  @@index([userId])
+}
+
+model SuperBalanceHistory {
+  id        String       @id @default(cuid())
+  accountId String
+  date      DateTime
+  balance   Float
+  account   SuperAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, date])
+  @@index([accountId])
+}
+
+model CashAccount {
+  id               String              @id @default(cuid())
+  userId           String
+  name             String
+  institution      String?
+  balance          Float
+  currency         String              @default("AUD")
+  notes            String?
+  balanceUpdatedAt DateTime            @default(now())
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balanceHistory   CashBalanceHistory[]
+
+  @@index([userId])
+}
+
+model CashBalanceHistory {
+  id        String      @id @default(cuid())
+  accountId String
+  date      DateTime
+  balance   Float
+  account   CashAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, date])
+  @@index([accountId])
+}
+
+model NetWorthSnapshot {
+  id              String   @id @default(cuid())
+  userId          String
+  date            DateTime
+  totalAssets     Float
+  totalLiabilities Float
+  netWorth        Float
+  sharesValue     Float    @default(0)
+  propertyValue   Float    @default(0)
+  superBalance    Float    @default(0)
+  cashBalance     Float    @default(0)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId])
+}
+
+model AnticipatedInheritance {
+  id           String   @id @default(cuid())
+  userId       String
+  name         String
+  amount       Float
+  expectedYear Int                        // calendar year expected to receive
+  probability  Int      @default(100)     // 0–100; scales effective amount
+  currency     String   @default("AUD")
+  notes        String?
+  includeInFire Boolean @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model FireSettings {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  annualExpenses        Float
+  withdrawalRate        Float    @default(4.0)
+  expectedReturn        Float    @default(7.0)
+  inflationRate         Float    @default(3.0)
+  superGrowthRate       Float    @default(9.0)  // nominal annual % — super grows separately
+  monthlySavings        Float    @default(0)
+  yearOfBirth           Int      @default(1985)  // used to compute currentAge each visit
+  targetRetireAge       Int?
+  includeSuper          Boolean  @default(true)
+  includePropertyEquity Boolean  @default(true)
+  includeCash           Boolean  @default(true)
+  notes                 String?
+  updatedAt             DateTime @updatedAt
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ── Budget models ─────────────────────────────────────────────────────────────
+
+model BudgetCategory {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  group     String   @default("LIVING") // INCOME | LIVING | TRANSPORT | HEALTH | SAVINGS | OTHER
+  icon      String?
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  budgets   Budget[]
+  actuals   BudgetActual[]
+
+  @@index([userId])
+}
+
+model Budget {
+  id         String         @id @default(cuid())
+  userId     String
+  categoryId String
+  year       Int
+  month      Int
+  amount     Float
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category   BudgetCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, year, month])
+  @@index([userId, year, month])
+}
+
+model BudgetActual {
+  id         String         @id @default(cuid())
+  userId     String
+  categoryId String
+  year       Int
+  month      Int
+  amount     Float
+  notes      String?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category   BudgetCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, year, month])
+  @@index([userId, year, month])
+}
