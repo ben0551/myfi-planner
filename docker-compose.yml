@@ -1,11 +1,12 @@
 services:
   app:
     build: .
+    expose:
+      - "3000"
     ports:
-      - "${PORT:-3000}:3000"       # Next.js web app
-      - "${SMTP_PORT:-2525}:2525"  # SMTP email ingest
+      - "${SMTP_PORT:-2525}:2525"   # SMTP email ingest (direct, not proxied)
     volumes:
-      - myfi_data:/app/data        # SQLite database persistence
+      - myfi_data:/app/data         # SQLite database persistence
     environment:
       DATABASE_URL: "file:/app/data/prod.db"
       AUTH_SECRET: "${AUTH_SECRET}"
@@ -14,6 +15,7 @@ services:
       NODE_ENV: production
       PORT: "3000"
       SMTP_PORT: "2525"
+      NEXTAUTH_URL: "https://${DOMAIN:-myfi.localhost}"
       # Optional AI keys — leave blank to disable
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
@@ -24,8 +26,31 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 40s
+    labels:
+      - "traefik.enable=true"
+      # HTTP router — redirect to HTTPS
+      - "traefik.http.routers.myfi-http.rule=Host(`${DOMAIN:-myfi.localhost}`)"
+      - "traefik.http.routers.myfi-http.entrypoints=web"
+      - "traefik.http.routers.myfi-http.middlewares=redirect-to-https"
+      # HTTPS router
+      - "traefik.http.routers.myfi.rule=Host(`${DOMAIN:-myfi.localhost}`)"
+      - "traefik.http.routers.myfi.entrypoints=websecure"
+      - "traefik.http.routers.myfi.tls=true"
+      - "traefik.http.routers.myfi.tls.certresolver=letsencrypt"
+      # Service — point Traefik at the app port
+      - "traefik.http.services.myfi.loadbalancer.server.port=3000"
+      # Shared HTTPS redirect middleware
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
+    networks:
+      - traefik_proxy
+      - default
 
 volumes:
   myfi_data:
     driver: local
+
+networks:
+  traefik_proxy:
+    external: true   # Must already exist — created by your Traefik stack
