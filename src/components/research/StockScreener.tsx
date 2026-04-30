@@ -34,9 +34,7 @@ function SortTh({
         className={`flex items-center gap-1 text-xs uppercase tracking-wide ${active ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'}`}
       >
         {children}
-        <span className="opacity-60">
-          {active ? (dir === 'asc' ? '↑' : '↓') : '↕'}
-        </span>
+        <span className="opacity-60">{active ? (dir === 'asc' ? '↑' : '↓') : '↕'}</span>
       </button>
     </th>
   )
@@ -49,8 +47,8 @@ export function StockScreener() {
   const [sector, setSector] = useState('')
   const [onWatchlistOnly, setOnWatchlistOnly] = useState(false)
   const [holdingsOnly, setHoldingsOnly] = useState(false)
-  const [sortKey, setSortKey] = useState<SortKey>('ticker')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [sortKey, setSortKey] = useState<SortKey>('dividendYield')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [togglingTicker, setTogglingTicker] = useState<string | null>(null)
 
   const params = new URLSearchParams()
@@ -59,6 +57,8 @@ export function StockScreener() {
   if (sector) params.set('sector', sector)
   if (onWatchlistOnly) params.set('onWatchlist', 'true')
   if (holdingsOnly) params.set('holdings', 'true')
+  // Pass fundOnly=false only when user explicitly wants unsynced tickers too
+  // (default is true — only show tickers with fundamentals data)
 
   const { data, isLoading, mutate } = useSWR<ScreenerResponse>(
     `/api/screener?${params}`,
@@ -118,8 +118,26 @@ export function StockScreener() {
     }
   }
 
+  const { totalInDb = 0, fundAvailableCount = 0 } = data ?? {}
+  const hasFilters = !!(minYield || maxPE || sector || onWatchlistOnly || holdingsOnly || search)
+
   return (
     <div className="space-y-4">
+      {/* Coverage banner */}
+      {totalInDb > 0 && (
+        <div className="flex items-center justify-between text-xs text-gray-500 dark:text-slate-400 px-1">
+          <span>
+            {fundAvailableCount.toLocaleString()} of {totalInDb.toLocaleString()} ASX stocks have synced fundamentals
+            {fundAvailableCount < totalInDb && (
+              <> · <Link href="/admin/sync" className="text-indigo-500 hover:underline">Sync more →</Link></>
+            )}
+          </span>
+          {data && (
+            <span>{rows.length.toLocaleString()} result{rows.length !== 1 ? 's' : ''}</span>
+          )}
+        </div>
+      )}
+
       {/* Filters */}
       <Card>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -193,7 +211,7 @@ export function StockScreener() {
         </div>
       </Card>
 
-      {/* Results */}
+      {/* Empty / loading states */}
       {isLoading ? (
         <div className="text-center py-12 text-sm text-gray-400 dark:text-slate-500 animate-pulse">Loading…</div>
       ) : rows.length === 0 ? (
@@ -201,15 +219,14 @@ export function StockScreener() {
           <div className="text-center py-10">
             <p className="font-medium text-gray-500 dark:text-slate-400">No results</p>
             <p className="text-sm text-gray-400 dark:text-slate-500 mt-1">
-              Try adjusting the filters, or run a fundamentals sync from Admin → Sync.
+              {!hasFilters && fundAvailableCount === 0
+                ? <>No fundamentals data yet. <Link href="/admin/sync" className="text-indigo-500 hover:underline">Import the ASX list and run a batch sync →</Link></>
+                : 'Try adjusting the filters.'}
             </p>
           </div>
         </Card>
       ) : (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-gray-100 dark:border-slate-700 text-xs text-gray-400 dark:text-slate-500">
-            {rows.length} result{rows.length !== 1 ? 's' : ''}
-          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="border-b border-gray-100 dark:border-slate-700 text-left">
@@ -237,21 +254,15 @@ export function StockScreener() {
                           {r.ticker}
                         </Link>
                         {r.isHeld && (
-                          <span className="text-xs px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-full font-medium">
-                            Held
-                          </span>
+                          <span className="text-xs px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-full font-medium">Held</span>
                         )}
                       </div>
                       {r.companyName && (
-                        <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5 truncate max-w-[180px]">
-                          {r.companyName}
-                        </p>
+                        <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5 truncate max-w-[180px]">{r.companyName}</p>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right text-gray-700 dark:text-slate-300">
-                      {r.price != null
-                        ? formatCurrency(r.price, 'AUD')
-                        : <span className="text-gray-300 dark:text-slate-600">—</span>}
+                      {r.price != null ? formatCurrency(r.price, 'AUD') : <span className="text-gray-300 dark:text-slate-600">—</span>}
                     </td>
                     <td className="px-4 py-3 text-right">
                       {r.changePct != null
@@ -259,19 +270,13 @@ export function StockScreener() {
                         : <span className="text-gray-300 dark:text-slate-600">—</span>}
                     </td>
                     <td className="px-4 py-3 text-right text-gray-700 dark:text-slate-300">
-                      {r.dividendYield != null
-                        ? `${r.dividendYield.toFixed(2)}%`
-                        : <span className="text-gray-300 dark:text-slate-600">—</span>}
+                      {r.dividendYield != null ? `${r.dividendYield.toFixed(2)}%` : <span className="text-gray-300 dark:text-slate-600">—</span>}
                     </td>
                     <td className="px-4 py-3 text-right text-gray-500 dark:text-slate-400 hidden sm:table-cell">
-                      {r.frankingPct != null
-                        ? `${r.frankingPct}%`
-                        : <span className="text-gray-300 dark:text-slate-600">—</span>}
+                      {r.frankingPct != null ? `${r.frankingPct}%` : <span className="text-gray-300 dark:text-slate-600">—</span>}
                     </td>
                     <td className="px-4 py-3 text-right text-gray-700 dark:text-slate-300">
-                      {r.peRatio != null
-                        ? r.peRatio.toFixed(1)
-                        : <span className="text-gray-300 dark:text-slate-600">—</span>}
+                      {r.peRatio != null ? r.peRatio.toFixed(1) : <span className="text-gray-300 dark:text-slate-600">—</span>}
                     </td>
                     <td className="px-4 py-3 text-right text-gray-500 dark:text-slate-400 hidden md:table-cell">
                       {r.marketCap ?? <span className="text-gray-300 dark:text-slate-600">—</span>}

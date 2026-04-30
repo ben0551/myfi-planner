@@ -16,12 +16,19 @@ export interface ScreenerResult {
   onWatchlist: boolean
   watchlistId: string | null
   isHeld: boolean
+  hasFundamentals: boolean  // true if yield or PE data is available
 }
 
 export interface ScreenerResponse {
   results: ScreenerResult[]
   sectors: string[]
+  total: number            // count of results returned
+  totalInDb: number        // total tickers in MarketIndexSnapshot
+  fundAvailableCount: number  // tickers with at least yield or PE data
 }
+
+// Default cap when no filters applied — avoids loading all ~2000 tickers into the UI
+const DEFAULT_LIMIT = 300
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -35,6 +42,8 @@ export async function GET(req: NextRequest) {
   const sector   = searchParams.get('sector') ?? ''
   const onWatchlistOnly = searchParams.get('onWatchlist') === 'true'
   const holdingsOnly    = searchParams.get('holdings') === 'true'
+  // fundOnly: only show tickers that have been synced with fundamentals
+  const fundOnly = searchParams.get('fundOnly') !== 'false'  // default true
 
   const [watchlistItems, transactions] = await Promise.all([
     prisma.watchlistItem.findMany({ where: { userId }, select: { id: true, ticker: true } }),
@@ -66,22 +75,43 @@ export async function GET(req: NextRequest) {
     tickerIn = [...heldSet]
   }
 
-  // Build where clause — AND-chain conditions for compound filters
+  // Build Prisma where clause
   const conditions: Record<string, unknown>[] = []
   if (tickerIn !== undefined) conditions.push({ ticker: { in: tickerIn } })
   if (sector) conditions.push({ sector })
   if (minYield > 0) conditions.push({ dividendYield: { gte: minYield } })
   if (maxPE > 0) conditions.push({ peRatio: { gt: 0, lte: maxPE } })
 
+  // When no portfolio/watchlist filter, require fundamentals by default
+  // so we don't return thousands of name-only stubs
+  const hasAnyFilter = tickerIn !== undefined || minYield > 0 || maxPE > 0 || sector
+  if (fundOnly && !hasAnyFilter) {
+    conditions.push({
+      OR: [
+        { dividendYield: { not: null } },
+        { peRatio: { not: null } },
+        { marketCap: { not: null } },
+      ],
+    })
+  }
+
   const where = conditions.length > 0 ? { AND: conditions } : {}
 
-  const [snapshots, allSectorRows] = await Promise.all([
-    prisma.marketIndexSnapshot.findMany({ where, orderBy: { ticker: 'asc' } }),
+  const [snapshots, allSectorRows, totalInDb, fundAvailableCount] = await Promise.all([
+    prisma.marketIndexSnapshot.findMany({
+      where,
+      orderBy: [{ dividendYield: 'desc' }, { ticker: 'asc' }],
+      take: hasAnyFilter ? undefined : DEFAULT_LIMIT,
+    }),
     prisma.marketIndexSnapshot.findMany({
       where: { sector: { not: null } },
       select: { sector: true },
       distinct: ['sector'],
       orderBy: { sector: 'asc' },
+    }),
+    prisma.marketIndexSnapshot.count(),
+    prisma.marketIndexSnapshot.count({
+      where: { OR: [{ dividendYield: { not: null } }, { peRatio: { not: null } }, { marketCap: { not: null } }] },
     }),
   ])
 
@@ -94,6 +124,7 @@ export async function GET(req: NextRequest) {
 
   const results: ScreenerResult[] = snapshots.map((s) => {
     const pc = priceMap.get(s.ticker)
+    const hasFundamentals = s.dividendYield != null || s.peRatio != null || s.marketCap != null
     return {
       ticker: s.ticker,
       companyName: s.companyName ?? pc?.companyName ?? null,
@@ -108,10 +139,17 @@ export async function GET(req: NextRequest) {
       onWatchlist: watchlistMap.has(s.ticker),
       watchlistId: watchlistMap.get(s.ticker) ?? null,
       isHeld: heldSet.has(s.ticker),
+      hasFundamentals,
     }
   })
 
   const sectors = allSectorRows.map((s) => s.sector!).filter(Boolean)
 
-  return Response.json({ results, sectors } satisfies ScreenerResponse)
+  return Response.json({
+    results,
+    sectors,
+    total: results.length,
+    totalInDb,
+    fundAvailableCount,
+  } satisfies ScreenerResponse)
 }

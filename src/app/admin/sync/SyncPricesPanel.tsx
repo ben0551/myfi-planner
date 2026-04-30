@@ -28,6 +28,22 @@ interface FundamentalsResult {
   errorDetails?: string[]
 }
 
+interface ImportAsxResult {
+  total: number
+  created: number
+  updated: number
+  skipped: number
+  error?: string
+}
+
+interface BatchSyncResult {
+  synced: number
+  errors: number
+  batchSize: number
+  stillNeverSynced: number
+  errorDetails?: string[]
+}
+
 interface Props {
   tickers: string[]
   coverage: CoverageRow[]
@@ -66,8 +82,46 @@ export function SyncPricesPanel({ tickers, coverage, priceCacheCount, fundamenta
   const [fundRunning, setFundRunning] = useState(false)
   const [fundResult, setFundResult] = useState<FundamentalsResult | null>(null)
   const [fundError, setFundError] = useState<string | null>(null)
+  const [importRunning, setImportRunning] = useState(false)
+  const [importResult, setImportResult] = useState<ImportAsxResult | null>(null)
+  const [importError, setImportError] = useState<string | null>(null)
+  const [batchRunning, setBatchRunning] = useState(false)
+  const [batchResult, setBatchResult] = useState<BatchSyncResult | null>(null)
+  const [batchError, setBatchError] = useState<string | null>(null)
 
   const fundMap = new Map(fundamentals.map((f) => [f.ticker, f]))
+
+  async function runImportAsx() {
+    setImportRunning(true)
+    setImportResult(null)
+    setImportError(null)
+    try {
+      const res = await fetch('/api/admin/import-asx', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok || data.error) { setImportError(data.error ?? 'Import failed'); return }
+      setImportResult(data)
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'Network error')
+    } finally {
+      setImportRunning(false)
+    }
+  }
+
+  async function runBatchSync() {
+    setBatchRunning(true)
+    setBatchResult(null)
+    setBatchError(null)
+    try {
+      const res = await fetch('/api/admin/sync-asx-batch?limit=20', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) { setBatchError(data.error ?? 'Batch sync failed'); return }
+      setBatchResult(data)
+    } catch (err) {
+      setBatchError(err instanceof Error ? err.message : 'Network error')
+    } finally {
+      setBatchRunning(false)
+    }
+  }
 
   async function runFundamentalsSync() {
     setFundRunning(true)
@@ -260,11 +314,71 @@ export function SyncPricesPanel({ tickers, coverage, priceCacheCount, fundamenta
         </div>
       )}
 
+      {/* ASX universe import + batch sync */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-4">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-700 mb-1">ASX Stock Universe</h2>
+          <p className="text-xs text-gray-400">
+            Import all ~2,400 ASX listed companies from the public ASX CSV (name + sector).
+            Then use "Batch Sync" to fetch fundamentals for 20 at a time via Yahoo Finance.
+            Run batch sync repeatedly until all stocks are covered.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={runImportAsx}
+            disabled={importRunning}
+            className="px-4 py-2 bg-teal-600 text-white text-sm font-medium rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {importRunning ? 'Importing…' : 'Import ASX List'}
+          </button>
+          <button
+            onClick={runBatchSync}
+            disabled={batchRunning}
+            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {batchRunning ? 'Syncing…' : 'Batch Sync Next 20'}
+          </button>
+        </div>
+
+        {importRunning && (
+          <p className="text-sm text-teal-600 animate-pulse">Fetching ASX listed companies CSV…</p>
+        )}
+        {importResult && (
+          <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800">
+            Imported {importResult.total.toLocaleString()} companies — {importResult.created.toLocaleString()} new,{' '}
+            {importResult.updated.toLocaleString()} updated, {importResult.skipped.toLocaleString()} unchanged.
+          </div>
+        )}
+        {importError && (
+          <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">{importError}</div>
+        )}
+
+        {batchRunning && (
+          <p className="text-sm text-violet-600 animate-pulse">Fetching fundamentals from Yahoo Finance…</p>
+        )}
+        {batchResult && (
+          <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800">
+            Synced {batchResult.synced} tickers.
+            {batchResult.stillNeverSynced > 0 && (
+              <span className="ml-1 text-amber-700">{batchResult.stillNeverSynced.toLocaleString()} never-synced tickers remain — keep clicking.</span>
+            )}
+            {batchResult.errors > 0 && (
+              <span className="ml-1 text-red-600">{batchResult.errors} errors.</span>
+            )}
+          </div>
+        )}
+        {batchError && (
+          <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">{batchError}</div>
+        )}
+      </div>
+
       {/* Fundamentals sync */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h2 className="text-sm font-semibold text-gray-700">Fundamentals Sync</h2>
+            <h2 className="text-sm font-semibold text-gray-700">Portfolio Fundamentals Sync</h2>
             <p className="text-xs text-gray-400 mt-0.5">
               Fetches P/E, EPS, margins, ROE, revenue and more from FMP for every portfolio ticker.
               {!hasFmpKey && <span className="text-amber-600 ml-1">Set your FMP API key in Admin → Settings first.</span>}
