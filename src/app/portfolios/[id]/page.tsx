@@ -73,6 +73,9 @@ export default async function PortfolioPage({
           <Link href={`/portfolios/${id}/analysis`}>
             <Button size="sm" variant="secondary">Analysis</Button>
           </Link>
+          <Link href={`/portfolios/${id}/rebalance`}>
+            <Button size="sm" variant="secondary">Rebalance</Button>
+          </Link>
           <Link href={`/portfolios/${id}/tax`}>
             <Button size="sm" variant="secondary">Tax Report</Button>
           </Link>
