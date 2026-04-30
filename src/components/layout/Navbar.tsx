@@ -12,6 +12,7 @@ import { ThemePicker } from '@/components/ui/ThemePicker'
 const investItems = [
   { href: '/portfolios', label: 'Portfolios', icon: '📊' },
   { href: '/watchlist', label: 'Watchlist', icon: '👁' },
+  { href: '/screener', label: 'Screener', icon: '🔎' },
   { href: '/income', label: 'Income', icon: '💰' },
   { href: '/transactions', label: 'Transactions', icon: '🔍' },
   { href: '/tax', label: 'Tax', icon: '🧾' },
