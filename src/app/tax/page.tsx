@@ -222,6 +222,33 @@ export default async function TaxSummaryPage({
               </Link>
             </div>
           )}
+
+          {/* Tax-loss harvesting */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                Tax-Loss Harvesting
+              </h2>
+              <Link
+                href={`/tax/harvest?fy=${fyYear}`}
+                className="text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-200"
+              >
+                Full analysis →
+              </Link>
+            </div>
+            <Card>
+              <p className="text-sm text-gray-700 dark:text-slate-300">
+                Identify positions at an unrealised loss that could be sold before 30 June to offset your{' '}
+                <strong>{formatCurrency(agg.netAssessableGain, currency)}</strong> net assessable capital gain.
+              </p>
+              <Link
+                href={`/tax/harvest?fy=${fyYear}`}
+                className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 text-sm font-medium rounded-lg border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors"
+              >
+                View harvest opportunities →
+              </Link>
+            </Card>
+          </div>
         </>
       )}
     </div>
