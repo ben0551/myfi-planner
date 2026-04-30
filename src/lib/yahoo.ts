@@ -392,7 +392,8 @@ export async function getYfProfile(ticker: string): Promise<YfProfile | null> {
       next: { revalidate: 0 },
     })
     if (!res.ok) {
-      _crumbCache = null
+      if (res.status === 401 || res.status === 403) _crumbCache = null
+      console.warn(`[yahoo] getYfProfile ${ticker} HTTP ${res.status}`)
       return null
     }
     const data = await res.json()
@@ -414,6 +415,68 @@ export async function getYfProfile(ticker: string): Promise<YfProfile | null> {
   }
 }
 
+export interface YfAllData {
+  profile: YfProfile
+  fundamentals: YfFundamentals
+}
+
+/**
+ * Fetch profile + fundamentals in a single quoteSummary request.
+ * Use this in the admin sync instead of separate getYfProfile + getYfFundamentals
+ * calls to halve the number of Yahoo Finance requests and avoid rate limiting.
+ */
+export async function getYfAllData(ticker: string): Promise<YfAllData | null> {
+  try {
+    const auth = await getYahooCrumb()
+    if (!auth) return null
+
+    const symbol = toSymbol(ticker)
+    const modules = 'assetProfile,summaryDetail,defaultKeyStatistics,price'
+    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=${modules}&crumb=${encodeURIComponent(auth.crumb)}`
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        Accept: 'application/json',
+        Cookie: auth.cookie,
+      },
+      next: { revalidate: 0 },
+    })
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) _crumbCache = null
+      console.warn(`[yahoo] getYfAllData ${ticker} HTTP ${res.status}`)
+      return null
+    }
+    const data = await res.json()
+    const result = data?.quoteSummary?.result?.[0]
+    if (!result) return null
+
+    const ap = result.assetProfile ?? {}
+    const sd = result.summaryDetail ?? {}
+    const ks = result.defaultKeyStatistics ?? {}
+    const price = result.price ?? {}
+
+    return {
+      profile: {
+        sector:   ap.sector   ?? null,
+        industry: ap.industry ?? null,
+        country:  ap.country  ?? null,
+        beta:     sd.beta?.raw ?? ap.beta?.raw ?? null,
+      },
+      fundamentals: {
+        marketCap:     price.marketCap?.raw ?? sd.marketCap?.raw ?? null,
+        trailingPE:    sd.trailingPE?.raw ?? null,
+        forwardPE:     sd.forwardPE?.raw  ?? null,
+        trailingEps:   ks.trailingEps?.raw ?? null,
+        dividendYield: sd.dividendYield?.raw != null ? sd.dividendYield.raw * 100 : null,
+        beta:          sd.beta?.raw ?? null,
+      },
+    }
+  } catch (err) {
+    console.error('[yahoo] getYfAllData failed:', err)
+    return null
+  }
+}
+
 export async function getYfFundamentals(ticker: string): Promise<YfFundamentals | null> {
   try {
     const auth = await getYahooCrumb()
@@ -431,8 +494,7 @@ export async function getYfFundamentals(ticker: string): Promise<YfFundamentals 
       next: { revalidate: 0 },
     })
     if (!res.ok) {
-      // Invalidate crumb so next call re-fetches
-      _crumbCache = null
+      if (res.status === 401 || res.status === 403) _crumbCache = null
       console.warn(`[yahoo] fundamentals ${ticker} HTTP ${res.status}`)
       return null
     }

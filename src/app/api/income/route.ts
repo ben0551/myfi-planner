@@ -99,38 +99,41 @@ export async function GET() {
   const projectedMap = new Map<string, number>()
   const byTicker: TickerProjection[] = []
 
+  const cutoff12m = new Date(now)
+  cutoff12m.setMonth(cutoff12m.getMonth() - 12)
+
   for (const [ticker, payments] of tickerDivMap) {
     if (payments.length === 0) continue
     const sorted = [...payments].sort((a, b) => a.date.getTime() - b.date.getTime())
-    const lastPayment = sorted[sorted.length - 1].amount
 
-    // Find which months (1-12) this ticker paid in the last 12 months
-    const cutoff12m = new Date(now)
-    cutoff12m.setMonth(cutoff12m.getMonth() - 12)
+    // Prefer recent 12-month history; fall back to all available (up to 24 months)
+    // so tickers whose last dividend was 13-24 months ago still get projected
     const recentPayments = sorted.filter((p) => p.date >= cutoff12m)
-    if (recentPayments.length === 0) continue
+    const paymentsForProjection = recentPayments.length > 0 ? recentPayments : sorted
 
-    const payMonths = recentPayments.map((p) => p.date.getUTCMonth() + 1) // 1-indexed
-    const avgAmount = recentPayments.reduce((s, p) => s + p.amount, 0) / recentPayments.length
+    // Sum amounts by calendar month — handles multiple portfolios holding same stock
+    const monthTotals = new Map<number, number>()
+    for (const p of paymentsForProjection) {
+      const m = p.date.getUTCMonth() + 1
+      monthTotals.set(m, (monthTotals.get(m) ?? 0) + p.amount)
+    }
+    if (monthTotals.size === 0) continue
+
+    const payMonths = [...monthTotals.keys()]
+    const annualTotal = [...monthTotals.values()].reduce((s, a) => s + a, 0)
 
     byTicker.push({
       ticker,
-      annualEstimate: avgAmount * recentPayments.length,
-      lastPayment,
-      paymentsPerYear: recentPayments.length,
+      annualEstimate: annualTotal,
+      lastPayment: sorted[sorted.length - 1].amount,
+      paymentsPerYear: payMonths.length,
     })
 
-    // Project the same months 12 months forward from now
+    // Project each payment month forward: if already passed this year → next year
     for (const payMonth of payMonths) {
-      // Find the projected year for this month
-      let projYear = thisYear
-      let projMonth = payMonth
-      // If this month is in the past relative to today, project to next year
-      if (payMonth < thisMonth || (payMonth === thisMonth)) {
-        projYear = thisYear + 1
-      }
-      const key = `${projYear}-${String(projMonth).padStart(2, '0')}`
-      projectedMap.set(key, (projectedMap.get(key) ?? 0) + avgAmount)
+      const projYear = payMonth <= thisMonth ? thisYear + 1 : thisYear
+      const key = `${projYear}-${String(payMonth).padStart(2, '0')}`
+      projectedMap.set(key, (projectedMap.get(key) ?? 0) + (monthTotals.get(payMonth) ?? 0))
     }
   }
 

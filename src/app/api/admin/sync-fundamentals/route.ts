@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { prisma } from '@/lib/prisma'
 import { getFmpData } from '@/lib/fmp'
-import { getYfFundamentals, getYfProfile } from '@/lib/yahoo'
+import { getYfAllData } from '@/lib/yahoo'
 
 function fmtCap(v: number | null): string | null {
   if (v == null) return null
@@ -35,11 +35,12 @@ export async function POST() {
       batch.map(async (ticker) => {
         try {
           // Try FMP first, then fall back to Yahoo Finance for missing fields
-          const [fmp, yfFund, yfProfile] = await Promise.all([
+          const [fmp, yfAll] = await Promise.all([
             hasFmp ? getFmpData(ticker) : Promise.resolve({ profile: null, ratios: null, news: [], income: [] }),
-            getYfFundamentals(ticker),
-            getYfProfile(ticker),
+            getYfAllData(ticker),
           ])
+          const yfFund = yfAll?.fundamentals ?? null
+          const yfProfile = yfAll?.profile ?? null
 
           const extras: Record<string, unknown> = {}
 
