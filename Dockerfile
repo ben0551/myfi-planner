@@ -52,4 +52,4 @@ ENV DATABASE_URL="file:/app/data/prod.db"
 EXPOSE 3000 2525
 
 # Sync schema and start the server
-CMD ["sh", "-c", "npx prisma db push && node_modules/.bin/tsx server.ts"]
+CMD ["sh", "-c", "npx prisma db push --accept-data-loss && node_modules/.bin/tsx server.ts"]
