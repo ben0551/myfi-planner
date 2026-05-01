@@ -1,11 +1,9 @@
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
-import { AnalystPanel } from '@/components/research/AnalystPanel'
 import { KeyStats } from '@/components/research/KeyStats'
 import { AnnouncementsFeed } from '@/components/research/AnnouncementsFeed'
 import { PriceChart } from '@/components/research/PriceChart'
 import { MarketIndexLink } from '@/components/research/MarketIndexLink'
-import { MarketIndexPanel } from '@/components/research/MarketIndexPanel'
 import { formatCurrency, gainClass, formatPercent } from '@/lib/formatters'
 import { getCachedAsxQuotes, syncAnnouncements } from '@/lib/asx/cache'
 import { getYfFundamentals, getYfProfile } from '@/lib/yahoo'
@@ -31,13 +29,14 @@ export default async function ResearchTickerPage({
   const { ticker } = await params
   const upper = ticker.toUpperCase()
 
-  const [priceMap, fundamentals, profile, fmp] = await Promise.all([
+  const [priceMap, fundamentals, profile, fmp, snapshot] = await Promise.all([
     getCachedAsxQuotes([upper]),
     getYfFundamentals(upper),
     getYfProfile(upper),
     getFmpData(upper),
-    syncAnnouncements(upper),
+    prisma.marketIndexSnapshot.findUnique({ where: { ticker: upper } }),
   ])
+  void syncAnnouncements(upper)
 
   const quote = priceMap.get(upper)
   const announcements = await prisma.announcement.findMany({
@@ -46,40 +45,51 @@ export default async function ResearchTickerPage({
     take: 20,
   })
 
-  // Archive Yahoo Finance data to DB on every visit (fire and forget)
+  // Build FMP extras to persist on every visit (keeps screener data fresh for researched tickers)
+  const extras: Record<string, unknown> = {}
+  if (fmp.ratios) {
+    if (fmp.ratios.returnOnEquityTTM != null)       extras.roe         = fmp.ratios.returnOnEquityTTM
+    if (fmp.ratios.returnOnAssetsTTM != null)       extras.roa         = fmp.ratios.returnOnAssetsTTM
+    if (fmp.ratios.netProfitMarginTTM != null)      extras.netMargin   = fmp.ratios.netProfitMarginTTM
+    if (fmp.ratios.debtEquityRatioTTM != null)      extras.debtEquity  = fmp.ratios.debtEquityRatioTTM
+    if (fmp.ratios.currentRatioTTM != null)         extras.currentRatio = fmp.ratios.currentRatioTTM
+    if (fmp.ratios.pbRatioTTM != null)              extras.pbRatio     = fmp.ratios.pbRatioTTM
+    if (fmp.ratios.priceToSalesRatioTTM != null)    extras.psRatio     = fmp.ratios.priceToSalesRatioTTM
+    if (fmp.ratios.freeCashFlowPerShareTTM != null) extras.fcfPerShare = fmp.ratios.freeCashFlowPerShareTTM
+  }
+  if (fmp.income[0]) {
+    if (fmp.income[0].revenue != null)   extras.revenue    = fmp.income[0].revenue
+    if (fmp.income[0].netIncome != null) extras.netIncome  = fmp.income[0].netIncome
+    if (fmp.income[0].ebitda != null)    extras.ebitda     = fmp.income[0].ebitda
+  }
+  if (fmp.profile?.description)       extras.description = fmp.profile.description
+  if (fmp.profile?.fullTimeEmployees) extras.employees   = fmp.profile.fullTimeEmployees
+  if (fmp.profile?.website)           extras.website     = fmp.profile.website
+  if (fundamentals?.beta != null)     extras.beta        = fundamentals.beta
+  const extrasJson = Object.keys(extras).length > 0 ? JSON.stringify(extras) : undefined
+
+  const snapshotData = {
+    fetchedAt: new Date(),
+    companyName: fmp.profile?.companyName ?? quote?.companyName ?? null,
+    price: quote?.price ?? null,
+    change: quote?.change ?? null,
+    changePct: quote?.changePct ?? null,
+    high52Week: quote?.fiftyTwoWeekHigh ?? null,
+    low52Week: quote?.fiftyTwoWeekLow ?? null,
+    marketCap: fmtMarketCap(fundamentals?.marketCap ?? null),
+    peRatio: fundamentals?.trailingPE ?? null,
+    eps: fundamentals?.trailingEps ?? null,
+    dividendYield: fundamentals?.dividendYield ?? null,
+    sector: fmp.profile?.sector ?? profile?.sector ?? null,
+    industry: fmp.profile?.industry ?? profile?.industry ?? null,
+    extras: extrasJson,
+  }
+
+  // Archive to DB on every visit (fire and forget) — keeps screener data current for researched tickers
   void prisma.marketIndexSnapshot.upsert({
     where: { ticker: upper },
-    update: {
-      fetchedAt: new Date(),
-      companyName: quote?.companyName ?? null,
-      price: quote?.price ?? null,
-      change: quote?.change ?? null,
-      changePct: quote?.changePct ?? null,
-      high52Week: quote?.fiftyTwoWeekHigh ?? null,
-      low52Week: quote?.fiftyTwoWeekLow ?? null,
-      marketCap: fmtMarketCap(fundamentals?.marketCap ?? null),
-      peRatio: fundamentals?.trailingPE ?? null,
-      eps: fundamentals?.trailingEps ?? null,
-      dividendYield: fundamentals?.dividendYield ?? null,
-      sector: profile?.sector ?? null,
-      industry: profile?.industry ?? null,
-    },
-    create: {
-      ticker: upper,
-      fetchedAt: new Date(),
-      companyName: quote?.companyName ?? null,
-      price: quote?.price ?? null,
-      change: quote?.change ?? null,
-      changePct: quote?.changePct ?? null,
-      high52Week: quote?.fiftyTwoWeekHigh ?? null,
-      low52Week: quote?.fiftyTwoWeekLow ?? null,
-      marketCap: fmtMarketCap(fundamentals?.marketCap ?? null),
-      peRatio: fundamentals?.trailingPE ?? null,
-      eps: fundamentals?.trailingEps ?? null,
-      dividendYield: fundamentals?.dividendYield ?? null,
-      sector: profile?.sector ?? null,
-      industry: profile?.industry ?? null,
-    },
+    update: snapshotData,
+    create: { ticker: upper, ...snapshotData },
   }).catch((err) => console.error('[research] snapshot save failed:', err))
 
   const currentPrice = quote?.price ?? null
@@ -136,36 +146,29 @@ export default async function ResearchTickerPage({
 
       {/* Price chart */}
       <Card>
-        <h2 className="font-semibold text-gray-900 mb-4">200-Day Price History</h2>
+        <h2 className="font-semibold text-gray-900 mb-4">Price History</h2>
         <PriceChart ticker={upper} />
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Analyst */}
-        <Card>
-          <h2 className="font-semibold text-gray-900 mb-4">Analyst Recommendations</h2>
-          <AnalystPanel
-            counts={{ strongBuy: 0, buy: 0, hold: 0, sell: 0, strongSell: 0 }}
-            recommendationMean={null}
-            recommendationKey={null}
-          />
-        </Card>
-
-        {/* Key Stats */}
-        <Card>
-          <h2 className="font-semibold text-gray-900 mb-4">Key Statistics</h2>
-          <KeyStats
-            marketCap={fundamentals?.marketCap ?? null}
-            peRatio={fundamentals?.trailingPE ?? null}
-            forwardPE={fundamentals?.forwardPE ?? null}
-            eps={fundamentals?.trailingEps ?? null}
-            dividendYield={fundamentals?.dividendYield ?? null}
-            beta={fundamentals?.beta ?? null}
-            fiftyTwoWeekHigh={quote?.fiftyTwoWeekHigh ?? null}
-            fiftyTwoWeekLow={quote?.fiftyTwoWeekLow ?? null}
-          />
-        </Card>
-      </div>
+      {/* Key Stats */}
+      <Card>
+        <h2 className="font-semibold text-gray-900 dark:text-white mb-4">Key Statistics</h2>
+        <KeyStats
+          marketCap={fundamentals?.marketCap ?? null}
+          peRatio={fundamentals?.trailingPE ?? null}
+          forwardPE={fundamentals?.forwardPE ?? null}
+          eps={fundamentals?.trailingEps ?? null}
+          dividendYield={fundamentals?.dividendYield ?? null}
+          dividendAmount={snapshot?.dividendAmount ?? null}
+          frankingPct={snapshot?.frankingPct ?? null}
+          beta={fundamentals?.beta ?? null}
+          fiftyTwoWeekHigh={quote?.fiftyTwoWeekHigh ?? null}
+          fiftyTwoWeekLow={quote?.fiftyTwoWeekLow ?? null}
+          currentPrice={currentPrice}
+          sector={profile?.sector ?? snapshot?.sector ?? null}
+          industry={profile?.industry ?? snapshot?.industry ?? null}
+        />
+      </Card>
 
       {/* FMP Company overview */}
       {fmp.profile?.description && (
@@ -280,23 +283,6 @@ export default async function ResearchTickerPage({
           </div>
         </Card>
       )}
-
-      {/* Archived fundamentals */}
-      <Card>
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="font-semibold text-gray-900">Saved Fundamentals</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Archived from Yahoo Finance on each visit</p>
-          </div>
-          <MarketIndexLink
-            ticker={upper}
-            className="text-xs text-gray-400 hover:text-indigo-500 transition-colors"
-          >
-            MarketIndex ↗
-          </MarketIndexLink>
-        </div>
-        <MarketIndexPanel ticker={upper} />
-      </Card>
 
       {/* Announcements */}
       <Card>

@@ -1,0 +1,24 @@
+# Local development override — no Traefik required
+# Usage: docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
+#
+# Access the app at http://localhost:3000
+
+services:
+  db:
+    ports:
+      - "5432:5432"
+
+  app:
+    build: .
+    image: myfi-planner:local
+    ports:
+      - "3000:3000"
+    environment:
+      NEXTAUTH_URL: "http://localhost:3000"
+    networks:
+      - default
+
+networks:
+  traefik_proxy:
+    name: myfi_local_dummy
+    driver: bridge

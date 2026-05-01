@@ -9,9 +9,10 @@ import { AlertCard } from '@/components/alerts/AlertCard'
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 export default function AlertsPage() {
-  const { data: alerts = [], mutate } = useSWR('/api/alerts', fetcher, {
+  const { data: alertsData, mutate } = useSWR('/api/alerts', fetcher, {
     refreshInterval: 30000,
   })
+  const alerts = Array.isArray(alertsData) ? alertsData : []
   const { data: portfolios = [] } = useSWR('/api/portfolios', fetcher)
 
   async function handleDelete(id: string) {

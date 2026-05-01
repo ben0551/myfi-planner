@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 
 interface CoverageRow {
   ticker: string
@@ -28,20 +28,14 @@ interface FundamentalsResult {
   errorDetails?: string[]
 }
 
-interface ImportAsxResult {
-  total: number
-  created: number
-  updated: number
-  skipped: number
-  error?: string
-}
-
 interface BatchSyncResult {
   synced: number
   errors: number
+  deleted?: number
   batchSize: number
   stillNeverSynced: number
   errorDetails?: string[]
+  error?: string
 }
 
 interface Props {
@@ -82,44 +76,62 @@ export function SyncPricesPanel({ tickers, coverage, priceCacheCount, fundamenta
   const [fundRunning, setFundRunning] = useState(false)
   const [fundResult, setFundResult] = useState<FundamentalsResult | null>(null)
   const [fundError, setFundError] = useState<string | null>(null)
-  const [importRunning, setImportRunning] = useState(false)
-  const [importResult, setImportResult] = useState<ImportAsxResult | null>(null)
-  const [importError, setImportError] = useState<string | null>(null)
   const [batchRunning, setBatchRunning] = useState(false)
   const [batchResult, setBatchResult] = useState<BatchSyncResult | null>(null)
   const [batchError, setBatchError] = useState<string | null>(null)
+  const [batchProgress, setBatchProgress] = useState<{ done: number; remaining: number } | null>(null)
+  const batchStopRef = useRef(false)
+  const batchAbortRef = useRef<AbortController | null>(null)
 
   const fundMap = new Map(fundamentals.map((f) => [f.ticker, f]))
 
-  async function runImportAsx() {
-    setImportRunning(true)
-    setImportResult(null)
-    setImportError(null)
-    try {
-      const res = await fetch('/api/admin/import-asx', { method: 'POST' })
-      const data = await res.json()
-      if (!res.ok || data.error) { setImportError(data.error ?? 'Import failed'); return }
-      setImportResult(data)
-    } catch (err) {
-      setImportError(err instanceof Error ? err.message : 'Network error')
-    } finally {
-      setImportRunning(false)
-    }
+  function stopBatchSync() {
+    batchStopRef.current = true
+    batchAbortRef.current?.abort()
   }
 
   async function runBatchSync() {
+    batchStopRef.current = false
     setBatchRunning(true)
     setBatchResult(null)
     setBatchError(null)
+    setBatchProgress(null)
+
+    let totalSynced = 0
+    let totalErrors = 0
+    let totalDeleted = 0
+
     try {
-      const res = await fetch('/api/admin/sync-asx-batch?limit=20', { method: 'POST' })
-      const data = await res.json()
-      if (!res.ok) { setBatchError(data.error ?? 'Batch sync failed'); return }
-      setBatchResult(data)
+      while (!batchStopRef.current) {
+        const controller = new AbortController()
+        batchAbortRef.current = controller
+
+        let res: Response
+        try {
+          res = await fetch('/api/admin/sync-asx-batch?limit=20', { method: 'POST', signal: controller.signal })
+        } catch {
+          break // fetch was aborted — exit cleanly
+        }
+
+        const data: BatchSyncResult = await res.json()
+        if (!res.ok) { setBatchError(data.error ?? 'Batch sync failed'); break }
+
+        totalSynced += data.synced
+        totalErrors += data.errors
+        totalDeleted += data.deleted ?? 0
+        setBatchProgress({ done: totalSynced, remaining: data.stillNeverSynced })
+
+        if (data.stillNeverSynced === 0 || batchStopRef.current) break
+
+        await new Promise((r) => setTimeout(r, 600))
+      }
+      setBatchResult({ synced: totalSynced, errors: totalErrors, deleted: totalDeleted, batchSize: 20, stillNeverSynced: 0 })
     } catch (err) {
       setBatchError(err instanceof Error ? err.message : 'Network error')
     } finally {
+      batchAbortRef.current = null
       setBatchRunning(false)
+      setBatchProgress(null)
     }
   }
 
@@ -314,55 +326,58 @@ export function SyncPricesPanel({ tickers, coverage, priceCacheCount, fundamenta
         </div>
       )}
 
-      {/* ASX universe import + batch sync */}
+      {/* Portfolio batch fundamentals sync */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-4">
         <div>
-          <h2 className="text-sm font-semibold text-gray-700 mb-1">ASX Stock Universe</h2>
+          <h2 className="text-sm font-semibold text-gray-700 mb-1">Batch Fundamentals Sync</h2>
           <p className="text-xs text-gray-400">
-            Import all ~2,400 ASX listed companies from the public ASX CSV (name + sector).
-            Then use "Batch Sync" to fetch fundamentals for 20 at a time via Yahoo Finance.
-            Run batch sync repeatedly until all stocks are covered.
+            Syncs fundamentals (P/E, EPS, market cap, ROE, etc.) for all portfolio, watchlist, and alert tickers
+            via Yahoo Finance and FMP. Runs in batches of 20 until all tickers are covered.
           </p>
         </div>
 
         <div className="flex flex-wrap gap-3">
-          <button
-            onClick={runImportAsx}
-            disabled={importRunning}
-            className="px-4 py-2 bg-teal-600 text-white text-sm font-medium rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {importRunning ? 'Importing…' : 'Import ASX List'}
-          </button>
-          <button
-            onClick={runBatchSync}
-            disabled={batchRunning}
-            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {batchRunning ? 'Syncing…' : 'Batch Sync Next 20'}
-          </button>
+          {batchRunning ? (
+            <button
+              onClick={stopBatchSync}
+              className="px-4 py-2 bg-red-500 text-white text-sm font-medium rounded-lg hover:bg-red-600 transition-colors"
+            >
+              Stop
+            </button>
+          ) : (
+            <button
+              onClick={runBatchSync}
+              className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
+            >
+              Sync All Remaining
+            </button>
+          )}
         </div>
 
-        {importRunning && (
-          <p className="text-sm text-teal-600 animate-pulse">Fetching ASX listed companies CSV…</p>
-        )}
-        {importResult && (
-          <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800">
-            Imported {importResult.total.toLocaleString()} companies — {importResult.created.toLocaleString()} new,{' '}
-            {importResult.updated.toLocaleString()} updated, {importResult.skipped.toLocaleString()} unchanged.
+        {batchRunning && batchProgress && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs text-gray-500">
+              <span className="text-violet-600 font-medium">{batchProgress.done.toLocaleString()} synced</span>
+              <span>{batchProgress.remaining.toLocaleString()} remaining</span>
+            </div>
+            {batchProgress.remaining + batchProgress.done > 0 && (
+              <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-violet-500 rounded-full transition-all"
+                  style={{ width: `${(batchProgress.done / (batchProgress.done + batchProgress.remaining)) * 100}%` }}
+                />
+              </div>
+            )}
           </div>
         )}
-        {importError && (
-          <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">{importError}</div>
-        )}
-
-        {batchRunning && (
-          <p className="text-sm text-violet-600 animate-pulse">Fetching fundamentals from Yahoo Finance…</p>
+        {batchRunning && !batchProgress && (
+          <p className="text-sm text-violet-600 animate-pulse">Starting sync…</p>
         )}
         {batchResult && (
           <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800">
-            Synced {batchResult.synced} tickers.
-            {batchResult.stillNeverSynced > 0 && (
-              <span className="ml-1 text-amber-700">{batchResult.stillNeverSynced.toLocaleString()} never-synced tickers remain — keep clicking.</span>
+            Done — synced {batchResult.synced.toLocaleString()} tickers.
+            {(batchResult.deleted ?? 0) > 0 && (
+              <span className="ml-1 text-gray-600">{batchResult.deleted} removed (no data found).</span>
             )}
             {batchResult.errors > 0 && (
               <span className="ml-1 text-red-600">{batchResult.errors} errors.</span>

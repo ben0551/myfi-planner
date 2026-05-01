@@ -112,6 +112,31 @@ async function doFetch(url: string): Promise<ChartResult | null> {
   return data?.chart?.result?.[0] ?? null
 }
 
+/**
+ * Returns false only when Yahoo definitively says the ticker doesn't exist
+ * (HTTP 404 or a 200 with null result). Returns true on any ambiguous error
+ * so we never delete a ticker due to a transient failure.
+ */
+export async function checkTickerExists(ticker: string): Promise<boolean> {
+  const symbol = toSymbol(ticker)
+  try {
+    const res = await fetch(`${YF_BASE}/${symbol}?interval=1d&range=5d`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        Accept: 'application/json',
+      },
+      next: { revalidate: 0 },
+    })
+    if (res.status === 404) return false
+    if (!res.ok) return true // 5xx or rate-limit — assume exists, don't delete
+    const data = await res.json()
+    if (data?.chart?.result?.[0] == null) return false // 200 but no data
+    return true
+  } catch {
+    return true // network error — be conservative
+  }
+}
+
 /** Fetch chart using a named range (1d, 5d, 1mo, 3mo, 1y, 2y) */
 export async function fetchChart(ticker: string, range = '1d'): Promise<ChartResult | null> {
   const symbol = toSymbol(ticker)
