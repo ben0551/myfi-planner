@@ -53,7 +53,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           MicrosoftEntraId({
             clientId: process.env.AZURE_AD_CLIENT_ID,
             clientSecret: process.env.AZURE_AD_CLIENT_SECRET,
-            tenantId: process.env.AZURE_AD_TENANT_ID ?? 'common',
+            issuer: `https://login.microsoftonline.com/${process.env.AZURE_AD_TENANT_ID ?? 'common'}/v2.0`,
           }),
         ]
       : []),
