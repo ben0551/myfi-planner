@@ -10,6 +10,7 @@ import { MortgageForm } from '@/components/wealth/MortgageForm'
 import { MortgageChart } from '@/components/wealth/MortgageChart'
 import { AssetValueChart } from '@/components/wealth/AssetValueChart'
 import { PropertyValueForm } from '@/components/wealth/PropertyValueForm'
+import { PropertyValuationHistory } from '@/components/wealth/PropertyValuationHistory'
 
 export const dynamic = 'force-dynamic'
 
@@ -184,44 +185,16 @@ export default async function PropertyDetailPage({ params }: Props) {
       {property.valueHistory.length > 0 && (
         <Card>
           <h2 className="text-sm font-semibold text-gray-700 mb-3">Recorded Valuations</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="text-left py-2 text-xs font-medium text-gray-500 uppercase">Date</th>
-                  <th className="text-right py-2 text-xs font-medium text-gray-500 uppercase">Value</th>
-                  <th className="text-right py-2 text-xs font-medium text-gray-500 uppercase">Change</th>
-                  <th className="text-right py-2 text-xs font-medium text-gray-500 uppercase">vs Purchase</th>
-                </tr>
-              </thead>
-              <tbody>
-                {property.valueHistory.map((entry, i) => {
-                  const prev = property.valueHistory[i + 1]
-                  const change = prev ? entry.value - prev.value : null
-                  const vsPurchase = entry.value - property.purchasePrice
-                  return (
-                    <tr key={entry.id} className="border-b border-gray-50">
-                      <td className="py-2 text-gray-700">{formatDate(entry.date)}</td>
-                      <td className="py-2 text-right font-medium text-gray-900">
-                        {formatCurrency(entry.value, property.currency)}
-                      </td>
-                      <td className={`py-2 text-right text-xs ${
-                        change === null ? 'text-gray-400' :
-                        change >= 0 ? 'text-emerald-600' : 'text-red-500'
-                      }`}>
-                        {change === null ? '—' : `${change >= 0 ? '+' : ''}${formatCurrency(change, property.currency)}`}
-                      </td>
-                      <td className={`py-2 text-right text-xs ${
-                        vsPurchase >= 0 ? 'text-emerald-600' : 'text-red-500'
-                      }`}>
-                        {vsPurchase >= 0 ? '+' : ''}{formatCurrency(vsPurchase, property.currency)}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          <PropertyValuationHistory
+            propertyId={property.id}
+            history={property.valueHistory.map((h) => ({
+              id: h.id,
+              date: h.date.toISOString(),
+              value: h.value,
+            }))}
+            purchasePrice={property.purchasePrice}
+            currency={property.currency}
+          />
         </Card>
       )}
 

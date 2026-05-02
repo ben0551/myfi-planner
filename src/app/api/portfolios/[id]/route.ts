@@ -37,10 +37,31 @@ export async function PUT(
   if (!owned) return Response.json({ error: 'Not found' }, { status: 404 })
 
   const body = await request.json()
-  const { name, description, currency } = body
+  const {
+    name, description, currency,
+    tdPrincipal, tdRate, tdTermMonths, tdStartDate, tdInterestFreq,
+  } = body
+
+  let tdMaturityDate: Date | undefined
+  if (owned.portfolioType === 'TERM_DEPOSIT' && tdStartDate && tdTermMonths) {
+    const start = new Date(tdStartDate)
+    start.setMonth(start.getMonth() + Number(tdTermMonths))
+    tdMaturityDate = start
+  }
+
   const portfolio = await prisma.portfolio.update({
     where: { id },
-    data: { name, description, currency },
+    data: {
+      name, description, currency,
+      ...(owned.portfolioType === 'TERM_DEPOSIT' ? {
+        tdPrincipal:    tdPrincipal    != null ? Number(tdPrincipal)    : undefined,
+        tdRate:         tdRate         != null ? Number(tdRate)         : undefined,
+        tdTermMonths:   tdTermMonths   != null ? Number(tdTermMonths)   : undefined,
+        tdStartDate:    tdStartDate    ? new Date(tdStartDate)          : undefined,
+        tdMaturityDate: tdMaturityDate ?? undefined,
+        tdInterestFreq: tdInterestFreq ?? undefined,
+      } : {}),
+    },
   })
   return Response.json(portfolio)
 }

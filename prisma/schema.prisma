@@ -102,8 +102,16 @@ model Portfolio {
   name                String
   description         String?
   currency            String               @default("AUD")
+  portfolioType       String               @default("SHARES")  // "SHARES" | "TERM_DEPOSIT"
   userId              String
   rebalanceTargets    String?              // JSON: [{ticker,targetPct}]
+  // Term deposit fields — null for SHARES type
+  tdPrincipal         Float?
+  tdRate              Float?               // annual interest rate %
+  tdTermMonths        Int?
+  tdStartDate         DateTime?
+  tdMaturityDate      DateTime?
+  tdInterestFreq      String?              // "MONTHLY" | "QUARTERLY" | "AT_MATURITY"
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
