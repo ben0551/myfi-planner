@@ -76,7 +76,11 @@ export function NetWorthHistoryChart() {
     const cutoff = new Date()
     cutoff.setDate(cutoff.getDate() - days)
     const cutoffStr = cutoff.toISOString().slice(0, 10)
-    return data.filter((d) => d.date >= cutoffStr)
+    const within = data.filter((d) => d.date >= cutoffStr)
+    // Carry-forward the last snapshot before the cutoff as the period's starting point
+    const before = [...data].reverse().find((d) => d.date < cutoffStr)
+    if (before) return [{ ...before, date: cutoffStr }, ...within]
+    return within
   }, [data, range])
 
   if (error) return null
@@ -115,9 +119,30 @@ export function NetWorthHistoryChart() {
     )
   }
 
+  const periodDelta = useMemo(() => {
+    if (filteredData.length < 2 || range === 'all') return null
+    const start = filteredData[0].netWorth
+    const end   = filteredData[filteredData.length - 1].netWorth
+    const delta = end - start
+    const pct   = start !== 0 ? (delta / Math.abs(start)) * 100 : null
+    return { delta, pct }
+  }, [filteredData, range])
+
   return (
     <div className="space-y-3">
-      <RangeSelector range={range} setRange={setRange} data={data} />
+      <div className="flex items-center justify-between">
+        {periodDelta ? (
+          <span className={`text-sm font-medium ${periodDelta.delta >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+            {periodDelta.delta >= 0 ? '+' : ''}{fmtFull(periodDelta.delta)}
+            {periodDelta.pct != null && (
+              <span className="ml-1.5 text-xs font-normal opacity-75">
+                ({periodDelta.pct >= 0 ? '+' : ''}{periodDelta.pct.toFixed(1)}%)
+              </span>
+            )}
+          </span>
+        ) : <span />}
+        <RangeSelector range={range} setRange={setRange} data={data} />
+      </div>
       <ResponsiveContainer width="100%" height={220}>
         <AreaChart data={filteredData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
           <defs>
