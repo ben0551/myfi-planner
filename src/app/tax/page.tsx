@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { computeCGTReport, computeDividendReport, availableFYs, currentFY, getFYLabel } from '@/lib/tax'
+import { computeCGTReport, computeDividendReport, availableFYs, currentFY, getFYLabel, computeCarriedForwardLoss } from '@/lib/tax'
 import { Card } from '@/components/ui/Card'
 import { TaxDisclaimer } from '@/components/tax/TaxDisclaimer'
 import { FYSelector } from '@/components/tax/FYSelector'
@@ -66,7 +66,7 @@ export default async function TaxSummaryPage({
     const costBase   = p.costBase ?? p.purchasePrice
     const grossGain  = salePrice - costBase
     const heldDays   = Math.round((p.soldDate!.getTime() - p.purchaseDate.getTime()) / 86400000)
-    const eligible   = heldDays >= 365 && grossGain > 0
+    const eligible   = heldDays > 365 && grossGain > 0
     return { grossGain, discountApplied: eligible ? grossGain * 0.5 : 0, assessable: eligible ? grossGain * 0.5 : grossGain }
   })
   const propGrossGain       = propertyEvents.reduce((s, e) => s + (e.grossGain > 0 ? e.grossGain : 0), 0)
@@ -83,7 +83,10 @@ export default async function TaxSummaryPage({
     frankingCredits:  perPortfolio.reduce((s, r) => s + r.div.totalFrankingCredits, 0),
     grossedUp:        perPortfolio.reduce((s, r) => s + r.div.totalGrossedUp, 0),
   }
-  const totalAssessable = agg.netAssessableGain + agg.grossedUp
+  const carriedForwardLoss = computeCarriedForwardLoss(allTransactions, fyYear)
+  const carriedApplied = Math.min(carriedForwardLoss, Math.max(0, agg.netAssessableGain))
+  const adjustedNetGain = Math.max(0, agg.netAssessableGain - carriedApplied)
+  const totalAssessable = adjustedNetGain + agg.grossedUp
 
   // Estimated dividend tax liability at chosen marginal rate
   const divTaxGross    = agg.grossedUp * (marginalRate / 100)
@@ -149,9 +152,14 @@ export default async function TaxSummaryPage({
               </Card>
               <Card>
                 <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Net Assessable</p>
-                <p className={`text-xl font-bold mt-1 ${gainClass(agg.netAssessableGain)}`}>
-                  {formatCurrency(agg.netAssessableGain, currency)}
+                <p className={`text-xl font-bold mt-1 ${gainClass(adjustedNetGain)}`}>
+                  {formatCurrency(adjustedNetGain, currency)}
                 </p>
+                {carriedApplied > 0 && (
+                  <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">
+                    −{formatCurrency(carriedApplied, currency)} prior-year losses applied
+                  </p>
+                )}
               </Card>
             </div>
           </div>

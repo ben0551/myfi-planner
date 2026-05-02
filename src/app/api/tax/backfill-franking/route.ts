@@ -14,7 +14,7 @@ export async function POST(_req: NextRequest) {
       type: { in: ['DIVIDEND', 'DRP'] },
       frankingPct: 0,
     },
-    select: { id: true, ticker: true, date: true },
+    select: { id: true, ticker: true, date: true, type: true, amount: true, quantity: true, price: true },
   })
 
   if (divTxs.length === 0) return Response.json({ updated: 0 })
@@ -47,9 +47,13 @@ export async function POST(_req: NextRequest) {
   for (const tx of divTxs) {
     const pct = findFranking(tx.ticker, tx.date)
     if (pct != null && pct > 0) {
+      const cashDiv = tx.amount != null
+        ? Number(tx.amount)
+        : Number(tx.quantity ?? 0) * Number(tx.price ?? 0)
+      const frankingCredit = cashDiv * (pct / 100) * (30 / 70)
       await prisma.transaction.update({
         where: { id: tx.id },
-        data: { frankingPct: pct },
+        data: { frankingPct: pct, frankingCredit },
       })
       updated++
     }

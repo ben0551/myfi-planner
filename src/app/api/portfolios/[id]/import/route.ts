@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 // Expected CSV columns (case-insensitive, order flexible):
 // Date, Type, Ticker, Quantity, Price, Fees, Amount, Franking %, Notes
 
-const VALID_TYPES = ['BUY', 'SELL', 'DIVIDEND'] as const
+const VALID_TYPES = ['BUY', 'SELL', 'DIVIDEND', 'DRP'] as const
 
 function parseRow(headers: string[], cells: string[]): Record<string, string> {
   const row: Record<string, string> = {}
@@ -63,7 +63,7 @@ export async function POST(
     const notes = row['notes'] ? row['notes'] : null
 
     if (!VALID_TYPES.includes(type as typeof VALID_TYPES[number])) {
-      errors.push({ row: rowNum, message: `Invalid type "${type}" — must be BUY, SELL, or DIVIDEND` })
+      errors.push({ row: rowNum, message: `Invalid type "${type}" — must be BUY, SELL, DIVIDEND, or DRP` })
       return
     }
     if (!ticker) {
@@ -83,6 +83,10 @@ export async function POST(
       errors.push({ row: rowNum, message: 'DIVIDEND rows must have an Amount' })
       return
     }
+    if (type === 'DRP' && (qty <= 0 || price <= 0)) {
+      errors.push({ row: rowNum, message: 'DRP rows must have Quantity and Price > 0' })
+      return
+    }
 
     parsed.push({ type, ticker, date: date.toISOString(), quantity: qty, price, fees, amount, frankingPct, notes })
   })
@@ -100,7 +104,7 @@ export async function POST(
   await prisma.transaction.createMany({
     data: parsed.map((t) => ({
       portfolioId: id,
-      type: t.type as 'BUY' | 'SELL' | 'DIVIDEND',
+      type: t.type as 'BUY' | 'SELL' | 'DIVIDEND' | 'DRP',
       ticker: t.ticker,
       date: new Date(t.date),
       quantity: t.quantity,

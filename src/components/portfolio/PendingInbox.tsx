@@ -57,6 +57,7 @@ export function PendingInbox({ items: initialItems, portfolioId, cashAccounts, d
   const [drpPriceOverrides, setDrpPriceOverrides] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState<Record<string, boolean>>({})
   const [bulkLoading, setBulkLoading] = useState(false)
+  const [bulkErrors, setBulkErrors] = useState<string[]>([])
   const [cashAccountId, setCashAccountId] = useState('')
 
   // Returns franking credit dollar amount for an item.
@@ -141,22 +142,39 @@ export function PendingInbox({ items: initialItems, portfolioId, cashAccounts, d
 
   async function confirmAll() {
     setBulkLoading(true)
+    setBulkErrors([])
+    const succeeded: string[] = []
+    const failed: string[] = []
+
     for (const item of items) {
       const type = getType(item)
-      await fetch(`/api/pending-transactions/${item.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'confirm',
-          portfolioId,
-          cashAccountId: type === 'DIVIDEND' && cashAccountId ? cashAccountId : undefined,
-          overrides: { transactionType: type },
-        }),
-      })
+      try {
+        const res = await fetch(`/api/pending-transactions/${item.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'confirm',
+            portfolioId,
+            cashAccountId: type === 'DIVIDEND' && cashAccountId ? cashAccountId : undefined,
+            overrides: { transactionType: type },
+          }),
+        })
+        if (res.ok) {
+          succeeded.push(item.id)
+        } else {
+          failed.push(item.ticker ?? item.id)
+        }
+      } catch {
+        failed.push(item.ticker ?? item.id)
+      }
     }
-    setItems([])
+
+    if (succeeded.length > 0) {
+      setItems((prev) => prev.filter((i) => !succeeded.includes(i.id)))
+      router.refresh()
+    }
+    if (failed.length > 0) setBulkErrors(failed)
     setBulkLoading(false)
-    router.refresh()
   }
 
   if (items.length === 0) {
@@ -173,6 +191,11 @@ export function PendingInbox({ items: initialItems, portfolioId, cashAccounts, d
 
   return (
     <div className="space-y-4">
+      {bulkErrors.length > 0 && (
+        <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded-lg text-sm">
+          Failed to confirm: {bulkErrors.join(', ')}. The others were processed.
+        </div>
+      )}
       {/* Global settings + bulk action */}
       <Card>
         <div className="flex items-center justify-between flex-wrap gap-4">
@@ -208,7 +231,7 @@ export function PendingInbox({ items: initialItems, portfolioId, cashAccounts, d
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-100 text-left text-xs text-gray-500 uppercase tracking-wide">
+              <tr className="border-b border-gray-100 dark:border-slate-700 text-left text-xs text-gray-500 dark:text-slate-400 uppercase tracking-wide">
                 <th className="px-6 pb-3 pt-4 font-medium">Ticker</th>
                 <th className="pb-3 pt-4 pr-4 font-medium">Ex-Date</th>
                 <th className="pb-3 pt-4 pr-4 font-medium text-right">Shares / New</th>
@@ -219,17 +242,20 @@ export function PendingInbox({ items: initialItems, portfolioId, cashAccounts, d
                 <th className="pb-3 pt-4 pr-6 font-medium"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-gray-50 dark:divide-slate-700/50">
               {items.map((item) => {
                 const total = totalAmount(item)
                 const busy = loading[item.id]
                 const type = getType(item)
                 const drpNewShares = type === 'DRP' ? getDrpNewShares(item) : null
+                const drpPriceInvalid = type === 'DRP' && (
+                  getDrpSharePrice(item) === '' || parseFloat(getDrpSharePrice(item)) <= 0
+                )
                 return (
-                  <tr key={item.id} className="hover:bg-gray-50">
-                    <td className="py-3 px-6 font-semibold text-gray-900">{item.ticker ?? '—'}</td>
-                    <td className="py-3 pr-4 text-gray-600 whitespace-nowrap">{formatTradeDate(item.tradeDate)}</td>
-                    <td className="py-3 pr-4 text-right text-gray-700">
+                  <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/50">
+                    <td className="py-3 px-6 font-semibold text-gray-900 dark:text-white">{item.ticker ?? '—'}</td>
+                    <td className="py-3 pr-4 text-gray-600 dark:text-slate-300 whitespace-nowrap">{formatTradeDate(item.tradeDate)}</td>
+                    <td className="py-3 pr-4 text-right text-gray-700 dark:text-slate-300">
                       {type === 'DRP' ? (
                         <span className="text-indigo-700 font-medium">
                           {drpNewShares != null ? `+${drpNewShares.toLocaleString(undefined, { maximumFractionDigits: 4 })}` : '—'}
@@ -238,17 +264,17 @@ export function PendingInbox({ items: initialItems, portfolioId, cashAccounts, d
                         item.quantity?.toLocaleString(undefined, { maximumFractionDigits: 0 }) ?? '—'
                       )}
                     </td>
-                    <td className="py-3 pr-4 text-right text-gray-700">
+                    <td className="py-3 pr-4 text-right text-gray-700 dark:text-slate-300">
                       {type === 'DRP' ? (
                         <div className="flex items-center justify-end gap-1">
-                          <span className="text-xs text-gray-400">$</span>
+                          <span className="text-xs text-gray-400 dark:text-slate-500">$</span>
                           <input
                             type="number"
                             min="0.0001"
                             step="0.01"
                             value={getDrpSharePrice(item)}
                             onChange={(e) => setDrpPriceOverrides((o) => ({ ...o, [item.id]: e.target.value }))}
-                            className="w-20 text-sm border border-indigo-200 rounded px-2 py-0.5 bg-white text-gray-700 text-right focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                            className={`w-20 text-sm border rounded px-2 py-0.5 bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-200 text-right focus:outline-none focus:ring-1 focus:ring-indigo-400 ${drpPriceInvalid ? 'border-red-300 dark:border-red-700' : 'border-indigo-200 dark:border-indigo-700'}`}
                             placeholder="0.00"
                           />
                         </div>
@@ -261,14 +287,14 @@ export function PendingInbox({ items: initialItems, portfolioId, cashAccounts, d
                     </td>
                     <td className="py-3 pr-4 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <span className="text-xs text-gray-400">$</span>
+                        <span className="text-xs text-gray-400 dark:text-slate-500">$</span>
                         <input
                           type="number"
                           min="0"
                           step="0.01"
                           value={getFrankingCredit(item)}
                           onChange={(e) => setFrankingOverrides((o) => ({ ...o, [item.id]: e.target.value }))}
-                          className="w-20 text-sm border border-gray-200 rounded px-2 py-0.5 bg-white text-gray-700 text-right focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                          className="w-20 text-sm border border-gray-200 dark:border-slate-600 rounded px-2 py-0.5 bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-200 text-right focus:outline-none focus:ring-1 focus:ring-indigo-400"
                           placeholder="0.00"
                         />
                       </div>
@@ -277,7 +303,7 @@ export function PendingInbox({ items: initialItems, portfolioId, cashAccounts, d
                       <select
                         value={type}
                         onChange={(e) => setTypeOverrides((o) => ({ ...o, [item.id]: e.target.value }))}
-                        className="text-xs border border-gray-200 rounded px-2 py-1 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                        className="text-xs border border-gray-200 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-400"
                       >
                         <option value="DIVIDEND">Dividend (cash)</option>
                         <option value="DRP">DRP (reinvested)</option>
@@ -285,7 +311,7 @@ export function PendingInbox({ items: initialItems, portfolioId, cashAccounts, d
                     </td>
                     <td className="py-3 pr-6">
                       <div className="flex gap-2 justify-end">
-                        <Button size="sm" onClick={() => confirmItem(item)} disabled={busy}>
+                        <Button size="sm" onClick={() => confirmItem(item)} disabled={busy || drpPriceInvalid} title={drpPriceInvalid ? 'Enter a valid DRP share price first' : undefined}>
                           Confirm
                         </Button>
                         <Button size="sm" variant="ghost" onClick={() => rejectItem(item.id)} disabled={busy}>

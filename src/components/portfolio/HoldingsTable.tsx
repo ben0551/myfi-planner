@@ -114,7 +114,7 @@ export function HoldingsTable({ holdings, currency, portfolioId, drpTickers = {}
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-gray-200 text-left text-xs text-gray-500 uppercase tracking-wide">
+          <tr className="border-b border-gray-200 dark:border-slate-700 text-left text-xs text-gray-500 dark:text-slate-400 uppercase tracking-wide">
             <Th col="ticker" label="Ticker" />
             <Th col="quantity" label="Qty" right />
             <Th col="avgCost" label="Avg Cost" right />
@@ -128,9 +128,9 @@ export function HoldingsTable({ holdings, currency, portfolioId, drpTickers = {}
             <th className="pb-3 pr-4 font-medium text-right">DRP</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody className="divide-y divide-gray-100 dark:divide-slate-700/50">
           {sorted.map((h) => (
-            <tr key={h.ticker} className="hover:bg-gray-50 transition-colors">
+            <tr key={h.ticker} className="hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors">
               <td className="py-3 pr-4">
                 <Link
                   href={`/research/${h.ticker}`}
@@ -139,20 +139,20 @@ export function HoldingsTable({ holdings, currency, portfolioId, drpTickers = {}
                   {h.ticker}
                 </Link>
               </td>
-              <td className="py-3 pr-4 text-right text-gray-700">
+              <td className="py-3 pr-4 text-right text-gray-700 dark:text-slate-300">
                 {formatNumber(h.quantity, 0)}
               </td>
-              <td className="py-3 pr-4 text-right text-gray-700">
+              <td className="py-3 pr-4 text-right text-gray-700 dark:text-slate-300">
                 {formatCurrency(h.avgCost, currency)}
               </td>
-              <td className="py-3 pr-4 text-right text-gray-700">
+              <td className="py-3 pr-4 text-right text-gray-700 dark:text-slate-300">
                 {h.currentPrice !== null ? (
                   formatCurrency(h.currentPrice, currency)
                 ) : (
-                  <span className="text-gray-400 text-xs">unavailable</span>
+                  <span className="text-gray-400 dark:text-slate-500 text-xs">unavailable</span>
                 )}
               </td>
-              <td className="py-3 pr-4 text-right font-medium text-gray-900">
+              <td className="py-3 pr-4 text-right font-medium text-gray-900 dark:text-white">
                 {h.currentValue !== null ? formatCurrency(h.currentValue, currency) : '—'}
               </td>
               <td className={`py-3 pr-4 text-right font-medium ${gainClass(h.unrealisedGain)}`}>
@@ -166,7 +166,7 @@ export function HoldingsTable({ holdings, currency, portfolioId, drpTickers = {}
               <td className={`py-3 pr-4 text-right font-medium ${gainClass(h.unrealisedGainPct)}`}>
                 {h.unrealisedGainPct !== null ? formatPercent(h.unrealisedGainPct) : '—'}
               </td>
-              <td className="py-3 text-right text-gray-500">
+              <td className="py-3 text-right text-gray-500 dark:text-slate-400">
                 {h.weight !== null ? `${h.weight.toFixed(1)}%` : '—'}
               </td>
               <td className="py-3 pr-4 text-right">

@@ -36,7 +36,7 @@ export async function PUT(
   if (!owned) return Response.json({ error: 'Not found' }, { status: 404 })
 
   const body = await request.json()
-  const { type, ticker, date, quantity, price, fees, amount, frankingPct, notes } = body
+  const { type, ticker, date, quantity, price, fees, amount, frankingPct, frankingCredit, notes } = body
   const tx = await prisma.transaction.update({
     where: { id },
     data: {
@@ -48,6 +48,7 @@ export async function PUT(
       fees,
       amount: amount ?? null,
       frankingPct: frankingPct ?? undefined,
+      frankingCredit: frankingCredit ?? undefined,
       notes: notes ?? null,
     },
   })

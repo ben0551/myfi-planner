@@ -150,11 +150,18 @@ export function ReconcileModal({ portfolioId, holdings }: Props) {
         </div>
 
         {!result && (
-          <div className="px-6 py-4 border-t border-gray-100 dark:border-slate-700 flex justify-end gap-3">
-            <Button size="sm" variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button size="sm" onClick={apply} disabled={!anyDiff || loading} loading={loading}>
-              Apply adjustments
-            </Button>
+          <div className="px-6 py-4 border-t border-gray-100 dark:border-slate-700">
+            {anyDiff && holdings.some(h => { const d = getDiff(h.ticker); return d !== null && d < -0.0001 }) && (
+              <p className="text-xs text-amber-600 dark:text-amber-400 mb-3">
+                ⚠ SELL adjustments may trigger a CGT event. Consult your tax adviser before applying.
+              </p>
+            )}
+            <div className="flex justify-end gap-3">
+              <Button size="sm" variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button size="sm" onClick={apply} disabled={!anyDiff || loading} loading={loading}>
+                Apply adjustments
+              </Button>
+            </div>
           </div>
         )}
       </div>

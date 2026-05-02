@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
   if (!session) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()
-  const { portfolioId, type, ticker, date, quantity, price, fees = 0, amount, frankingPct = 0, notes } = body
+  const { portfolioId, type, ticker, date, quantity, price, fees = 0, amount, frankingPct = 0, frankingCredit = 0, notes } = body
 
   if (!portfolioId || !type || !ticker || !date) {
     return Response.json(
@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
       fees,
       amount: amount ?? null,
       frankingPct: frankingPct ?? 0,
+      frankingCredit: frankingCredit ?? 0,
       notes: notes ?? null,
     },
   })

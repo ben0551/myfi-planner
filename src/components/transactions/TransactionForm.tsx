@@ -15,7 +15,7 @@ interface InitialValues {
   price: string
   fees: string
   amount: string
-  frankingPct: string
+  frankingCredit: string
   notes: string
 }
 
@@ -51,7 +51,7 @@ export function TransactionForm({
   const [price, setPrice] = useState(initialValues?.price ?? '')
   const [fees, setFees] = useState(initialValues?.fees ?? '')
   const [amount, setAmount] = useState(initialValues?.amount ?? '')
-  const [frankingPct, setFrankingPct] = useState(initialValues?.frankingPct ?? '0')
+  const [frankingCredit, setFrankingCredit] = useState(initialValues?.frankingCredit ?? '0')
   const [notes, setNotes] = useState(initialValues?.notes ?? '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -87,7 +87,7 @@ export function TransactionForm({
           price: isDividendLike ? 0 : parseFloat(price),
           fees: fees ? parseFloat(fees) : 0,
           amount: (isDividendLike || isDrp) ? (amount ? parseFloat(amount) : undefined) : undefined,
-          frankingPct: (isDividendLike || isDrp) ? parseFloat(frankingPct) || 0 : 0,
+          frankingCredit: (isDividendLike || isDrp) ? parseFloat(frankingCredit) || 0 : 0,
           notes: notes || undefined,
         }),
       })
@@ -145,16 +145,12 @@ export function TransactionForm({
             onChange={(v) => setAmount(v)}
             placeholder="Total cash received"
           />
-          <Input
-            label="Franking % (0–100)"
-            type="number"
-            min="0"
-            max="100"
-            step="any"
-            value={frankingPct}
-            onChange={(e) => setFrankingPct(e.target.value)}
-            placeholder="0"
-            hint="0 = unfranked, 100 = fully franked"
+          <LabelledCurrencyInput
+            label="Franking Credits ($)"
+            value={frankingCredit}
+            onChange={(v) => setFrankingCredit(v)}
+            placeholder="0.00"
+            hint="From your dividend statement"
           />
         </div>
       ) : type === 'DRP' ? (
@@ -184,16 +180,12 @@ export function TransactionForm({
               placeholder={quantity && price ? String(parseFloat(quantity || '0') * parseFloat(price.replace(/,/g, '') || '0')) : '0'}
               hint="Defaults to shares × price"
             />
-            <Input
-              label="Franking % (0–100)"
-              type="number"
-              min="0"
-              max="100"
-              step="any"
-              value={frankingPct}
-              onChange={(e) => setFrankingPct(e.target.value)}
-              placeholder="0"
-              hint="0 = unfranked, 100 = fully franked"
+            <LabelledCurrencyInput
+              label="Franking Credits ($)"
+              value={frankingCredit}
+              onChange={(v) => setFrankingCredit(v)}
+              placeholder="0.00"
+              hint="From your dividend statement"
             />
           </div>
         </div>

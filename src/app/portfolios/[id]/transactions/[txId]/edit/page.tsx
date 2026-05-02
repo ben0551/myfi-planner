@@ -34,7 +34,7 @@ export default async function EditTransactionPage({
     price: tx.type === 'DIVIDEND' ? '' : tx.price.toString(),
     fees: tx.fees.toString(),
     amount: tx.amount?.toString() ?? '',
-    frankingPct: tx.frankingPct?.toString() ?? '0',
+    frankingCredit: tx.frankingCredit?.toString() ?? '0',
     notes: tx.notes ?? '',
   }
 

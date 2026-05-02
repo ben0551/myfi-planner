@@ -288,6 +288,32 @@ export function computeDividendReport(
   }
 }
 
+// ── Capital Loss Carry-Forward ────────────────────────────────────────────────
+
+/**
+ * Computes the net capital loss carried forward into targetFY from all prior FYs.
+ * Each FY's losses offset that FY's gains first; any surplus carries to the next year.
+ */
+export function computeCarriedForwardLoss(
+  transactions: Transaction[],
+  targetFY: number
+): number {
+  const priorFYs = availableFYs(transactions)
+    .filter((fy) => fy < targetFY)
+    .sort((a, b) => a - b)
+
+  let balance = 0
+  for (const fy of priorFYs) {
+    const report = computeCGTReport(transactions, fy)
+    const gainAfterCarry = Math.max(0, report.totalAssessableGain - balance)
+    const unabsorbedCarry = Math.max(0, balance - report.totalAssessableGain)
+    const netLossThisFY = Math.max(0, report.totalCapitalLosses - gainAfterCarry)
+    balance = unabsorbedCarry + netLossThisFY
+  }
+
+  return balance
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 
 export function computeTaxSummary(

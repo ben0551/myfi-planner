@@ -72,18 +72,35 @@ export async function POST(
   // ── Get tickers that had holdings at some point ───────────────────────────
   const allTickers = Array.from(tickerQtyTimeline.keys()).slice(0, MAX_TICKERS)
 
-  // ── Fetch existing DIVIDEND/DRP transactions for dedup ───────────────────
-  const existingDivs = await prisma.transaction.findMany({
-    where: { portfolioId: id, type: { in: ['DIVIDEND', 'DRP'] } },
-    select: { ticker: true, date: true, amount: true },
-  })
+  // ── Fetch existing DIVIDEND/DRP transactions and pending items for dedup ─────
+  const [existingDivs, pendingDivs] = await Promise.all([
+    prisma.transaction.findMany({
+      where: { portfolioId: id, type: { in: ['DIVIDEND', 'DRP'] } },
+      select: { ticker: true, date: true },
+    }),
+    prisma.pendingTransaction.findMany({
+      where: {
+        portfolioId: id,
+        transactionType: { in: ['DIVIDEND', 'DRP'] },
+        status: { not: 'REJECTED' },
+      },
+      select: { ticker: true, tradeDate: true },
+    }),
+  ])
 
-  function isDuplicate(ticker: string, exDate: Date, amount: number): boolean {
+  function isDuplicate(ticker: string, exDate: Date, _amount: number): boolean {
     const windowMs = DEDUP_WINDOW_DAYS * 86400 * 1000
-    return existingDivs.some(
+    const inConfirmed = existingDivs.some(
       (d) =>
         d.ticker.toUpperCase() === ticker &&
         Math.abs(d.date.getTime() - exDate.getTime()) <= windowMs
+    )
+    if (inConfirmed) return true
+    return pendingDivs.some(
+      (d) =>
+        d.ticker?.toUpperCase() === ticker &&
+        d.tradeDate != null &&
+        Math.abs(new Date(d.tradeDate).getTime() - exDate.getTime()) <= windowMs
     )
   }
 
