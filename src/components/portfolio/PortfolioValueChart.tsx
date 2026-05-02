@@ -18,6 +18,7 @@ interface Snapshot {
   date: string
   value: number
   invested: number
+  income?: number
 }
 
 type Range = '1M' | '3M' | '6M' | '1Y' | 'All'
@@ -106,6 +107,10 @@ export function PortfolioValueChart({ portfolioId, currency }: Props) {
               <stop offset="5%" stopColor="#0891b2" stopOpacity={0.15} />
               <stop offset="95%" stopColor="#0891b2" stopOpacity={0} />
             </linearGradient>
+            <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#059669" stopOpacity={0.2} />
+              <stop offset="95%" stopColor="#059669" stopOpacity={0} />
+            </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
           <XAxis
@@ -124,14 +129,14 @@ export function PortfolioValueChart({ portfolioId, currency }: Props) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             formatter={(value: any, name: any) => [
               formatCurrency(value, currency),
-              name === 'value' ? 'Market Value' : 'Invested',
+              name === 'value' ? 'Market Value' : name === 'invested' ? 'Invested' : 'Income',
             ]}
             contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}
           />
           <Legend
             formatter={(value) => (
               <span style={{ fontSize: 12, color: '#374151' }}>
-                {value === 'value' ? 'Market Value' : 'Invested'}
+                {value === 'value' ? 'Market Value' : value === 'invested' ? 'Invested' : 'Income'}
               </span>
             )}
           />
@@ -150,6 +155,15 @@ export function PortfolioValueChart({ portfolioId, currency }: Props) {
             strokeWidth={1.5}
             strokeDasharray="4 4"
             fill="url(#colorInvested)"
+            dot={false}
+          />
+          <Area
+            type="monotone"
+            dataKey="income"
+            stroke="#059669"
+            strokeWidth={1.5}
+            strokeDasharray="2 2"
+            fill="url(#colorIncome)"
             dot={false}
           />
         </AreaChart>

@@ -151,7 +151,8 @@ model Transaction {
   price       Decimal
   fees        Decimal         @default(0)
   amount      Decimal?
-  frankingPct Float           @default(0)  // DIVIDEND only; 0–100
+  frankingPct    Float  @default(0)   // DIVIDEND only; 0–100 (legacy — prefer frankingCredit)
+  frankingCredit Float  @default(0)   // DIVIDEND/DRP only; actual ATO franking credit $ amount
   notes       String?
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt

@@ -40,11 +40,15 @@ export async function PATCH(
     const ticker = (overrides?.ticker ?? pending.ticker) as string
     const date = overrides?.tradeDate ?? pending.tradeDate
 
-    // Franking: prefer explicit override, fall back to parseWarnings
+    // Franking credit dollar amount — preferred over frankingPct
+    const frankingCredit = overrides?.frankingCredit != null ? Number(overrides.frankingCredit) : 0
+    // Legacy franking pct — only used as fallback when no credit $ amount provided
     const frankingFromWarnings = pending.parseWarnings?.match(/Franking:\s*(\d+)/)
-    const frankingPct = overrides?.frankingPct != null
-      ? Number(overrides.frankingPct)
-      : frankingFromWarnings ? parseInt(frankingFromWarnings[1], 10) : 0
+    const frankingPct = frankingCredit > 0
+      ? 0  // pct irrelevant when we have the dollar amount
+      : overrides?.frankingPct != null
+        ? Number(overrides.frankingPct)
+        : frankingFromWarnings ? parseInt(frankingFromWarnings[1], 10) : 0
 
     if (!type || !ticker || !date) {
       return Response.json(
@@ -108,6 +112,7 @@ export async function PATCH(
           fees,
           amount: totalAmount,
           frankingPct,
+          frankingCredit,
           notes: overrides?.notes ?? null,
         },
       })

@@ -20,6 +20,7 @@ type SortKey =
   | 'currentValue'
   | 'unrealisedGain'
   | 'unrealisedGainPct'
+  | 'dividendsReceived'
   | 'weight'
 
 interface SortState {
@@ -117,11 +118,13 @@ export function HoldingsTable({ holdings, currency, portfolioId, drpTickers = {}
             <Th col="ticker" label="Ticker" />
             <Th col="quantity" label="Qty" right />
             <Th col="avgCost" label="Avg Cost" right />
-            <Th col="currentPrice" label="Current Price" right />
-            <Th col="currentValue" label="Market Value" right />
-            <Th col="unrealisedGain" label="Unrealised Gain" right />
+            <Th col="currentPrice" label="Price" right />
+            <Th col="currentValue" label="Value" right />
+            <Th col="unrealisedGain" label="Cap. Gain" right />
+            <Th col="dividendsReceived" label="Income" right />
             <Th col="unrealisedGainPct" label="Return %" right />
             <Th col="weight" label="Weight" right />
+            <th className="pb-3 pr-4 font-medium text-right">Currency</th>
             <th className="pb-3 pr-4 font-medium text-right">DRP</th>
           </tr>
         </thead>
@@ -157,11 +160,17 @@ export function HoldingsTable({ holdings, currency, portfolioId, drpTickers = {}
                   ? formatCurrency(h.unrealisedGain, currency)
                   : '—'}
               </td>
+              <td className="py-3 pr-4 text-right font-medium text-emerald-700">
+                {h.dividendsReceived > 0 ? formatCurrency(h.dividendsReceived, currency) : '—'}
+              </td>
               <td className={`py-3 pr-4 text-right font-medium ${gainClass(h.unrealisedGainPct)}`}>
                 {h.unrealisedGainPct !== null ? formatPercent(h.unrealisedGainPct) : '—'}
               </td>
               <td className="py-3 text-right text-gray-500">
                 {h.weight !== null ? `${h.weight.toFixed(1)}%` : '—'}
+              </td>
+              <td className="py-3 pr-4 text-right">
+                <span className="text-xs text-gray-400 font-mono">{currency}</span>
               </td>
               <td className="py-3 pr-4 text-right">
                 <button

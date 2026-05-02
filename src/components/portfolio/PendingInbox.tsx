@@ -41,11 +41,6 @@ function totalAmount(item: PendingItem) {
   return null
 }
 
-function frankingPct(item: PendingItem) {
-  const m = item.parseWarnings?.match(/Franking:\s*(\d+)/)
-  return m ? parseInt(m[1], 10) : null
-}
-
 function formatTradeDate(iso: string | null) {
   if (!iso) return '—'
   return new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -56,6 +51,7 @@ export function PendingInbox({ items: initialItems, portfolioId, cashAccounts, d
   const [items, setItems] = useState(initialItems)
   // Per-item type override: 'DIVIDEND' | 'DRP'
   const [typeOverrides, setTypeOverrides] = useState<Record<string, string>>({})
+  // Per-item franking credit overrides — dollar amounts, not percentages
   const [frankingOverrides, setFrankingOverrides] = useState<Record<string, string>>({})
   // Per-item DRP share price override (defaults to currentPrices[ticker])
   const [drpPriceOverrides, setDrpPriceOverrides] = useState<Record<string, string>>({})
@@ -63,10 +59,17 @@ export function PendingInbox({ items: initialItems, portfolioId, cashAccounts, d
   const [bulkLoading, setBulkLoading] = useState(false)
   const [cashAccountId, setCashAccountId] = useState('')
 
-  function getFranking(item: PendingItem): string {
+  // Returns franking credit dollar amount for an item.
+  // Default: compute from frankingPct in parseWarnings × total dividend × 30/70.
+  function getFrankingCredit(item: PendingItem): string {
     if (frankingOverrides[item.id] !== undefined) return frankingOverrides[item.id]
     const m = item.parseWarnings?.match(/Franking:\s*(\d+)/)
-    return m ? m[1] : ''
+    if (!m) return ''
+    const pct = parseInt(m[1], 10)
+    const total = totalAmount(item)
+    if (!total || pct === 0) return ''
+    const credit = total * (pct / 100) * (30 / 70)
+    return credit.toFixed(2)
   }
 
   function getDrpSharePrice(item: PendingItem): string {
@@ -96,9 +99,10 @@ export function PendingInbox({ items: initialItems, portfolioId, cashAccounts, d
     setLoading((l) => ({ ...l, [item.id]: true }))
     const type = getType(item)
     try {
+      const creditStr = getFrankingCredit(item)
       const overrides: Record<string, unknown> = {
         transactionType: type,
-        frankingPct: getFranking(item) !== '' ? Number(getFranking(item)) : 0,
+        frankingCredit: creditStr !== '' ? Number(creditStr) : 0,
       }
       // Pass DRP share price so the server can compute new shares = total_div / drp_price
       if (type === 'DRP') {
@@ -210,7 +214,7 @@ export function PendingInbox({ items: initialItems, portfolioId, cashAccounts, d
                 <th className="pb-3 pt-4 pr-4 font-medium text-right">Shares / New</th>
                 <th className="pb-3 pt-4 pr-4 font-medium text-right">Div/Share · DRP Price</th>
                 <th className="pb-3 pt-4 pr-4 font-medium text-right">Total Div</th>
-                <th className="pb-3 pt-4 pr-4 font-medium text-right">Franking</th>
+                <th className="pb-3 pt-4 pr-4 font-medium text-right">Franking Credits</th>
                 <th className="pb-3 pt-4 pr-4 font-medium">Type</th>
                 <th className="pb-3 pt-4 pr-6 font-medium"></th>
               </tr>
@@ -218,7 +222,6 @@ export function PendingInbox({ items: initialItems, portfolioId, cashAccounts, d
             <tbody className="divide-y divide-gray-50">
               {items.map((item) => {
                 const total = totalAmount(item)
-                const franking = frankingPct(item)
                 const busy = loading[item.id]
                 const type = getType(item)
                 const drpNewShares = type === 'DRP' ? getDrpNewShares(item) : null
@@ -258,17 +261,16 @@ export function PendingInbox({ items: initialItems, portfolioId, cashAccounts, d
                     </td>
                     <td className="py-3 pr-4 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        <span className="text-xs text-gray-400">$</span>
                         <input
                           type="number"
                           min="0"
-                          max="100"
-                          step="1"
-                          value={getFranking(item)}
+                          step="0.01"
+                          value={getFrankingCredit(item)}
                           onChange={(e) => setFrankingOverrides((o) => ({ ...o, [item.id]: e.target.value }))}
-                          className="w-14 text-sm border border-gray-200 rounded px-2 py-0.5 bg-white text-gray-700 text-right focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                          placeholder="0"
+                          className="w-20 text-sm border border-gray-200 rounded px-2 py-0.5 bg-white text-gray-700 text-right focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                          placeholder="0.00"
                         />
-                        <span className="text-xs text-gray-400">%</span>
                       </div>
                     </td>
                     <td className="py-3 pr-4">

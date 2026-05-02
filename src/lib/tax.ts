@@ -236,12 +236,17 @@ export function computeDividendReport(
           ? new Decimal(tx.amount.toString())
           : new Decimal(tx.quantity.toString()).times(new Decimal(tx.price.toString())))
       : new Decimal(tx.amount?.toString() ?? '0')
+
+    // Prefer the stored frankingCredit dollar amount (captured from broker statement).
+    // Fall back to computing from frankingPct for legacy transactions that predate this field.
+    const storedCredit = tx.frankingCredit ?? 0
     const frankingPct = tx.frankingPct ?? 0
-    // frankingCredit = cashDiv / (1 - TAX_RATE) * TAX_RATE * (frankingPct / 100)
-    const frankingCredit = cashDiv
-      .dividedBy(new Decimal(1).minus(CORPORATE_TAX_RATE))
-      .times(CORPORATE_TAX_RATE)
-      .times(new Decimal(frankingPct).dividedBy(100))
+    const frankingCredit: Decimal = storedCredit > 0
+      ? new Decimal(storedCredit.toString())
+      : cashDiv
+          .dividedBy(new Decimal(1).minus(CORPORATE_TAX_RATE))
+          .times(CORPORATE_TAX_RATE)
+          .times(new Decimal(frankingPct).dividedBy(100))
     const grossedUp = cashDiv.plus(frankingCredit)
 
     return {

@@ -35,12 +35,9 @@ export async function GET(
   // SHARES portfolios: reconstruct value from transaction history × HistoricalPrice.
   // This avoids the stale-price problem from snapshot carry-forward.
   const transactions = await prisma.transaction.findMany({
-    where: {
-      portfolioId: id,
-      type: { in: ['BUY', 'SELL', 'DRP'] },
-    },
+    where: { portfolioId: id },
     orderBy: { date: 'asc' },
-    select: { type: true, ticker: true, date: true, quantity: true, price: true, fees: true },
+    select: { type: true, ticker: true, date: true, quantity: true, price: true, fees: true, amount: true },
   })
 
   if (transactions.length === 0) return Response.json([])
@@ -80,18 +77,26 @@ export async function GET(
   }
   const sortedPriceDates = [...allPriceDatesSet].sort()
 
-  const firstDate = toDateStr(transactions[0].date)
+  // Separate holding transactions (affect value) from income transactions (DIVIDEND/DRP)
+  const holdingTxns = transactions.filter(t => t.type === 'BUY' || t.type === 'SELL' || t.type === 'DRP')
+  const allTxns = transactions  // needed to compute income
+
+  if (holdingTxns.length === 0) return Response.json([])
+
+  const firstDate = toDateStr(holdingTxns[0].date)
   const holdingsMap = new Map<string, number>()
   let invested = 0
-  let txnIdx = 0
-  const result: { date: string; value: number; invested: number }[] = []
+  let cumulativeIncome = 0
+  let holdingIdx = 0
+  let incomeIdx = 0
+  const result: { date: string; value: number; invested: number; income: number }[] = []
 
   for (const date of sortedPriceDates) {
     if (date < firstDate) continue
 
-    // Apply all transactions whose date falls on or before this price date
-    while (txnIdx < transactions.length && toDateStr(transactions[txnIdx].date) <= date) {
-      const t = transactions[txnIdx]
+    // Apply all holding transactions on or before this date
+    while (holdingIdx < holdingTxns.length && toDateStr(holdingTxns[holdingIdx].date) <= date) {
+      const t = holdingTxns[holdingIdx]
       const qty = Number(t.quantity)
       const price = Number(t.price)
       const fees = Number(t.fees)
@@ -105,7 +110,22 @@ export async function GET(
       } else {
         holdingsMap.set(t.ticker, Math.max(0, current - qty))
       }
-      txnIdx++
+      holdingIdx++
+    }
+
+    // Accumulate dividend income (DIVIDEND + DRP amount) up to this date
+    while (incomeIdx < allTxns.length && toDateStr(allTxns[incomeIdx].date) <= date) {
+      const t = allTxns[incomeIdx]
+      if (t.type === 'DIVIDEND') {
+        cumulativeIncome += Number(t.amount ?? 0)
+      } else if (t.type === 'DRP') {
+        // DRP amount = original dividend cash value
+        const drpIncome = t.amount != null
+          ? Number(t.amount)
+          : Number(t.quantity) * Number(t.price)
+        cumulativeIncome += drpIncome
+      }
+      incomeIdx++
     }
 
     // Value = sum(holdings * price) on this date.
@@ -127,7 +147,7 @@ export async function GET(
     }
 
     if (value > 0) {
-      result.push({ date, value, invested })
+      result.push({ date, value, invested, income: cumulativeIncome })
     }
   }
 
