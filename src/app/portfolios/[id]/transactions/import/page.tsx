@@ -63,6 +63,55 @@ function parseCsv(text: string): { headers: string[]; rows: Record<string, strin
   return { headers, rows }
 }
 
+// ── Excel parser (SheetJS, lazy-loaded) ──────────────────────────────────────
+
+function cleanHeader(h: string): string {
+  return String(h).trim().toLowerCase().replace(/[^a-z%]/g, '')
+}
+
+async function parseXlsx(file: File): Promise<{ headers: string[]; rows: Record<string, string>[]; isStake: boolean }> {
+  const XLSX = await import('xlsx')
+  const buffer = await file.arrayBuffer()
+  const workbook = XLSX.read(buffer, { cellDates: true })
+
+  // Detect Stake: has sheets named like "Aus Equities" / "Wall St Equities"
+  const isStake = workbook.SheetNames.some((n) => /aus equities|wall st equities/i.test(n))
+
+  // Select which sheets to read: equity sheets for Stake, otherwise all non-meta sheets
+  const dataSheets = isStake
+    ? workbook.SheetNames.filter((n) => /equities/i.test(n))
+    : workbook.SheetNames.filter((n) => !/disclaimer|summary|readme|info/i.test(n))
+
+  if (dataSheets.length === 0) {
+    return { headers: [], rows: [], isStake }
+  }
+
+  let headers: string[] = []
+  const allRows: Record<string, string>[] = []
+
+  for (const sheetName of dataSheets) {
+    const sheet = workbook.Sheets[sheetName]
+    const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+      defval: '',
+      raw: false, // use formatted strings (handles dates nicely)
+    })
+    if (raw.length === 0) continue
+
+    const sheetRows = raw.map((row) => {
+      const out: Record<string, string> = {}
+      for (const [k, v] of Object.entries(row)) {
+        out[cleanHeader(k)] = String(v ?? '').trim()
+      }
+      return out
+    })
+
+    if (headers.length === 0) headers = Object.keys(sheetRows[0])
+    allRows.push(...sheetRows)
+  }
+
+  return { headers, rows: allRows, isStake }
+}
+
 // ── Broker definitions ────────────────────────────────────────────────────────
 
 type BrokerKey = 'native' | 'stake' | 'commsec'
@@ -101,7 +150,7 @@ const BROKERS: Record<BrokerKey, BrokerDef> = {
   commsec: {
     label: 'CommSec',
     signature: ['datetime', 'type', 'details', 'debit', 'credit', 'balance'],
-    normalize: (row) => row, // CommSec equity exports vary; passthrough for now
+    normalize: (row) => row,
   },
 }
 
@@ -130,11 +179,35 @@ export default function ImportTransactionsPage() {
   const [importing, setImporting] = useState(false)
   const [done, setDone] = useState(false)
   const [fileError, setFileError] = useState<string | null>(null)
+  const [fileName, setFileName] = useState<string | null>(null)
 
-  function handleFile(file: File) {
+  async function handleFile(file: File) {
     setFileError(null)
     setPreview(null)
     setDone(false)
+    setFileName(file.name)
+
+    const isXlsx = file.name.toLowerCase().endsWith('.xlsx') ||
+      file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
+    if (isXlsx) {
+      try {
+        const { headers, rows, isStake } = await parseXlsx(file)
+        if (rows.length === 0) {
+          setFileError('No data rows found in the Excel file. Check that the file has data sheets.')
+          return
+        }
+        const detected: BrokerKey = isStake ? 'stake' : detectBroker(headers)
+        setBroker(detected)
+        setAutoDetected(detected)
+        setRawRows(rows)
+      } catch (err) {
+        setFileError(`Could not read Excel file: ${err instanceof Error ? err.message : 'unknown error'}`)
+      }
+      return
+    }
+
+    // CSV path
     const reader = new FileReader()
     reader.onload = (e) => {
       const text = e.target?.result as string
@@ -226,7 +299,8 @@ export default function ImportTransactionsPage() {
           ))}
         </div>
         <p className="text-indigo-700">
-          Upload a CSV export from any supported broker and the format will be detected automatically.
+          Upload a <strong>CSV</strong> or <strong>Excel (.xlsx)</strong> export from any supported broker — format is detected automatically.
+          Stake Excel files with multiple sheets (Aus Equities, Wall St Equities) are merged automatically.
           For the native format, columns must include: Date, Type (BUY/SELL/DIVIDEND), Ticker, Quantity, Price, Fees, Amount, Franking&nbsp;%, Notes.
         </p>
       </div>
@@ -247,14 +321,14 @@ export default function ImportTransactionsPage() {
             <input
               ref={fileRef}
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               className="hidden"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
             />
             <p className="text-gray-500 text-sm">
               {rawRows.length > 0
-                ? <span className="text-indigo-700 font-medium">{rawRows.length} rows loaded — ready to preview</span>
-                : 'Click or drag a CSV file here'}
+                ? <span className="text-indigo-700 font-medium">{rawRows.length} rows loaded from {fileName} — ready to preview</span>
+                : 'Click or drag a CSV or Excel (.xlsx) file here'}
             </p>
             {fileError && <p className="mt-2 text-sm text-red-600">{fileError}</p>}
           </div>

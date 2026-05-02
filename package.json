@@ -37,6 +37,7 @@
     "sonner": "^2.0.7",
     "swr": "^2.4.1",
     "tsx": "^4.21.0",
+    "xlsx": "^0.18.5",
     "yahoo-finance2": "2.13.4"
   },
   "devDependencies": {
