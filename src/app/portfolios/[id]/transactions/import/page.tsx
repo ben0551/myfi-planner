@@ -184,6 +184,16 @@ export default function ImportTransactionsPage() {
         return
       }
       setDone(true)
+
+      // Pre-warm price cache for imported tickers so portfolio page loads fast
+      const importedTickers = [...new Set(
+        normalizedRows().map((r) => (r['ticker'] ?? '').toUpperCase()).filter(Boolean)
+      )]
+      if (importedTickers.length > 0) {
+        fetch(`/api/prices?tickers=${importedTickers.join(',')}`)
+          .catch(() => {})
+      }
+
       setTimeout(() => router.push(`/portfolios/${id}/transactions`), 1500)
     } finally {
       setImporting(false)

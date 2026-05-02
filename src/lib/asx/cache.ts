@@ -2,7 +2,8 @@ import { prisma } from '../prisma'
 import { getYfQuote, getYfProfile, getYfEtfProfile, type EtfProfile } from '../yahoo'
 import type { QuoteResult } from '../types'
 
-const PRICE_TTL_MS = 60 * 60 * 1000 // 60 minutes
+/** Background refresh fires when price is older than this — does not block the caller */
+const BG_REFRESH_AFTER_MS = 12 * 60 * 60 * 1000 // 12 hours
 
 // ── In-memory ETF profile cache (24-hour TTL, resets on server restart) ───────
 const _etfCache = new Map<string, { profile: EtfProfile; expiresAt: number }>()
@@ -50,56 +51,40 @@ export async function getCachedEtfProfiles(tickers: string[]): Promise<Map<strin
   return result
 }
 
-export async function getCachedAsxQuotes(
-  tickers: string[]
-): Promise<Map<string, QuoteResult>> {
-  const result = new Map<string, QuoteResult>()
-  if (tickers.length === 0) return result
-
-  const upper = tickers.map((t) => t.toUpperCase())
-  const now = new Date()
-  const cutoff = new Date(now.getTime() - PRICE_TTL_MS)
-
-  // Read fresh cache entries
-  const cached = await prisma.priceCache.findMany({
-    where: {
-      ticker: { in: upper },
-      fetchedAt: { gte: cutoff },
-    },
-  })
-
-  // Tickers that are fresh AND have 52-week data — truly complete
-  const completeTickers = new Set(
-    cached.filter((c) => c.fiftyTwoWeekHigh != null).map((c) => c.ticker)
-  )
-  for (const c of cached) {
-    result.set(c.ticker, {
-      ticker: c.ticker,
-      price: c.price.toNumber(),
-      currency: c.currency,
-      change: c.change?.toNumber() ?? null,
-      changePct: c.changePct?.toNumber() ?? null,
-      marketTime: c.marketTime,
-      source: 'ASX',
-      companyName: c.companyName ?? null,
-      fiftyTwoWeekHigh: c.fiftyTwoWeekHigh?.toNumber() ?? null,
-      fiftyTwoWeekLow: c.fiftyTwoWeekLow?.toNumber() ?? null,
-    })
+function cacheRowToQuote(c: {
+  ticker: string; price: { toNumber(): number }; currency: string
+  change: { toNumber(): number } | null; changePct: { toNumber(): number } | null
+  marketTime: Date; companyName: string | null
+  fiftyTwoWeekHigh: { toNumber(): number } | null; fiftyTwoWeekLow: { toNumber(): number } | null
+}): QuoteResult {
+  return {
+    ticker: c.ticker,
+    price: c.price.toNumber(),
+    currency: c.currency,
+    change: c.change?.toNumber() ?? null,
+    changePct: c.changePct?.toNumber() ?? null,
+    marketTime: c.marketTime,
+    source: 'ASX',
+    companyName: c.companyName ?? null,
+    fiftyTwoWeekHigh: c.fiftyTwoWeekHigh?.toNumber() ?? null,
+    fiftyTwoWeekLow: c.fiftyTwoWeekLow?.toNumber() ?? null,
   }
+}
 
-  // Fetch missing tickers OR those with incomplete 52-week data
-  const stale = upper.filter((t) => !completeTickers.has(t))
+async function fetchAndCacheQuotes(
+  tickers: string[],
+  now: Date,
+  result: Map<string, QuoteResult> | null  // null = background (don't populate result)
+): Promise<void> {
   await Promise.allSettled(
-    stale.map(async (ticker) => {
+    tickers.map(async (ticker) => {
       try {
         const quote = await getYfQuote(ticker)
         if (!quote) {
           console.warn(`[asx] no quote returned for ${ticker}`)
           return
         }
-
-        // Set result immediately — don't let a DB write failure suppress the price
-        result.set(ticker, {
+        const entry: QuoteResult = {
           ticker,
           price: quote.price,
           currency: 'AUD',
@@ -110,67 +95,82 @@ export async function getCachedAsxQuotes(
           companyName: quote.companyName ?? null,
           fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh ?? null,
           fiftyTwoWeekLow: quote.fiftyTwoWeekLow ?? null,
-        })
-
-        // Cache write is best-effort; failures are logged but don't affect the response
+        }
+        result?.set(ticker, entry)
         prisma.priceCache.upsert({
           where: { ticker },
           update: {
-            price: quote.price,
-            currency: 'AUD',
-            change: quote.change,
-            changePct: quote.changePct,
-            marketTime: now,
-            fetchedAt: now,
-            source: 'ASX',
+            price: quote.price, currency: 'AUD', change: quote.change,
+            changePct: quote.changePct, marketTime: now, fetchedAt: now, source: 'ASX',
             companyName: quote.companyName ?? null,
             fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh ?? null,
             fiftyTwoWeekLow: quote.fiftyTwoWeekLow ?? null,
           },
           create: {
-            ticker,
-            price: quote.price,
-            currency: 'AUD',
-            change: quote.change,
-            changePct: quote.changePct,
-            marketTime: now,
-            fetchedAt: now,
-            source: 'ASX',
+            ticker, price: quote.price, currency: 'AUD', change: quote.change,
+            changePct: quote.changePct, marketTime: now, fetchedAt: now, source: 'ASX',
             companyName: quote.companyName ?? null,
             fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh ?? null,
             fiftyTwoWeekLow: quote.fiftyTwoWeekLow ?? null,
           },
         }).catch((err) => console.error(`[asx] PriceCache write failed for ${ticker}:`, err))
       } catch (err) {
-        console.error(`[asx] getCachedAsxQuotes failed for ${ticker}:`, err)
+        console.error(`[asx] fetchAndCacheQuotes failed for ${ticker}:`, err)
       }
     })
   )
+}
 
-  // Stale-cache fallback: for any ticker still missing after the live fetch,
-  // serve whatever is in the DB regardless of age rather than returning nothing.
-  const stillMissing = upper.filter((t) => !result.has(t))
-  if (stillMissing.length > 0) {
-    const staleRows = await prisma.priceCache.findMany({
-      where: { ticker: { in: stillMissing } },
-    })
-    for (const c of staleRows) {
-      if (c.price.toNumber() > 0) {
-        result.set(c.ticker, {
-          ticker: c.ticker,
-          price: c.price.toNumber(),
-          currency: c.currency,
-          change: c.change?.toNumber() ?? null,
-          changePct: c.changePct?.toNumber() ?? null,
-          marketTime: c.marketTime,
-          source: 'ASX',
-          companyName: c.companyName ?? null,
-          fiftyTwoWeekHigh: c.fiftyTwoWeekHigh?.toNumber() ?? null,
-          fiftyTwoWeekLow: c.fiftyTwoWeekLow?.toNumber() ?? null,
-        })
-        console.warn(`[asx] serving stale cache for ${c.ticker} (fetchedAt: ${c.fetchedAt.toISOString()})`)
-      }
-    }
+/**
+ * Stale-while-revalidate price cache.
+ *
+ * - Tickers with NO cache entry: fetched synchronously (blocks until Yahoo responds).
+ * - Tickers with a valid cached price < 12 h old: returned immediately, no fetch.
+ * - Tickers with a valid cached price ≥ 12 h old: returned immediately from cache,
+ *   AND a background fetch is fired so the next SWR poll picks up fresh data.
+ */
+export async function getCachedAsxQuotes(
+  tickers: string[]
+): Promise<Map<string, QuoteResult>> {
+  const result = new Map<string, QuoteResult>()
+  if (tickers.length === 0) return result
+
+  const upper = tickers.map((t) => t.toUpperCase())
+  const now = new Date()
+  const bgCutoff = new Date(now.getTime() - BG_REFRESH_AFTER_MS)
+
+  // Read ALL cached entries regardless of age
+  const allCached = await prisma.priceCache.findMany({
+    where: { ticker: { in: upper } },
+  })
+  const cachedMap = new Map(allCached.map((c) => [c.ticker, c]))
+
+  // Serve whatever is in cache immediately (any age, as long as price > 0)
+  for (const c of allCached) {
+    if (c.price.toNumber() > 0) result.set(c.ticker, cacheRowToQuote(c))
+  }
+
+  // Synchronous fetch: tickers with no cache entry or price = 0 (stub rows)
+  const needSync = upper.filter((t) => {
+    const c = cachedMap.get(t)
+    return !c || c.price.toNumber() === 0
+  })
+
+  // Background fetch: valid cache but older than 12 h
+  const needBg = upper.filter((t) => {
+    const c = cachedMap.get(t)
+    return c && c.price.toNumber() > 0 && c.fetchedAt < bgCutoff
+  })
+
+  if (needSync.length > 0) {
+    await fetchAndCacheQuotes(needSync, now, result)
+  }
+
+  if (needBg.length > 0) {
+    // Fire-and-forget — cache updates in background, next SWR poll surfaces fresh data
+    fetchAndCacheQuotes(needBg, now, null).catch((err) =>
+      console.error('[asx] background price refresh error:', err)
+    )
   }
 
   return result
