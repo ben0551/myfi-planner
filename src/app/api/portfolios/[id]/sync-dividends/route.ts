@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { fetchYahooDividendHistory } from '@/lib/yahoo'
-import { fetchMarketIndexData } from '@/lib/marketindex'
+import { fetchMarketIndexDividendHistory } from '@/lib/marketindex'
 
 const DEDUP_WINDOW_DAYS = 14  // consider same dividend if within ±14 days
 const MAX_TICKERS = 30        // safety cap to avoid hammering Yahoo
@@ -87,20 +87,6 @@ export async function POST(
     )
   }
 
-  // ── Fetch franking % — try MarketIndex, cache per ticker ─────────────────
-  const frankingCache = new Map<string, number>()
-  async function getFranking(ticker: string): Promise<number> {
-    if (frankingCache.has(ticker)) return frankingCache.get(ticker)!
-    try {
-      const data = await fetchMarketIndexData(ticker)
-      const pct = data?.frankingPct ?? 0
-      frankingCache.set(ticker, pct)
-      return pct
-    } catch {
-      return 0
-    }
-  }
-
   // ── Main sync loop ────────────────────────────────────────────────────────
   let created = 0
   let skipped = 0
@@ -110,8 +96,28 @@ export async function POST(
 
   for (const ticker of allTickers) {
     try {
-      const dividends = await fetchYahooDividendHistory(ticker, 3)
+      const [dividends, miHistory] = await Promise.all([
+        fetchYahooDividendHistory(ticker, 3),
+        fetchMarketIndexDividendHistory(ticker),
+      ])
       if (dividends.length === 0) continue
+
+      // Build a lookup: exDate (YYYY-MM-DD) → frankingPct from MarketIndex
+      const miByDate = new Map<string, number>()
+      for (const mi of miHistory) {
+        miByDate.set(mi.exDate.toISOString().split('T')[0], mi.frankingPct)
+      }
+
+      function frankingForDate(exDate: Date): number {
+        const key = exDate.toISOString().split('T')[0]
+        if (miByDate.has(key)) return miByDate.get(key)!
+        // Fuzzy match within ±3 days (minor date alignment differences)
+        const ts = exDate.getTime()
+        for (const [k, v] of miByDate) {
+          if (Math.abs(new Date(k).getTime() - ts) <= 3 * 86400 * 1000) return v
+        }
+        return 0
+      }
 
       for (const div of dividends) {
         const qty = qtyAtDate(ticker, div.exDate)
@@ -126,7 +132,7 @@ export async function POST(
         }
 
         const totalAmount = qty * div.amountPerShare
-        const frankingPct = await getFranking(ticker)
+        const frankingPct = frankingForDate(div.exDate)
 
         toCreate.push({
           source: 'yahoo-sync',

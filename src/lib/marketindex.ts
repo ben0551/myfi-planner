@@ -302,3 +302,59 @@ export async function fetchMarketIndexData(ticker: string): Promise<MarketIndexD
 
   return result
 }
+
+export interface MarketIndexDividend {
+  exDate: Date
+  amount: number
+  frankingPct: number
+}
+
+/**
+ * Scrape the dividend history table from MarketIndex for a ticker.
+ * Returns per-dividend franking % which varies each payment.
+ * Table columns: Ex-Date | Amount | Franking | Gross | Type | Payable
+ */
+export async function fetchMarketIndexDividendHistory(ticker: string): Promise<MarketIndexDividend[]> {
+  const url = `https://www.marketindex.com.au/asx/${ticker.toLowerCase()}`
+  let html: string
+  try {
+    html = await httpsGet(url)
+  } catch {
+    return []
+  }
+
+  const results: MarketIndexDividend[] = []
+
+  // Find dividend table rows — pattern: <td>DD/MM/YYYY</td><td>$X.XXXX</td><td>XX%</td>
+  const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
+  let rowMatch: RegExpExecArray | null
+  while ((rowMatch = rowRegex.exec(html)) !== null) {
+    const row = rowMatch[1]
+    // Extract all <td> text values
+    const cells: string[] = []
+    const cellRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi
+    let cellMatch: RegExpExecArray | null
+    while ((cellMatch = cellRegex.exec(row)) !== null) {
+      cells.push(stripTags(cellMatch[1]).trim())
+    }
+    if (cells.length < 3) continue
+
+    // First cell: date in DD/MM/YYYY format
+    const dateMatch = cells[0].match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+    if (!dateMatch) continue
+
+    // Second cell: amount like $0.8479
+    const amount = parseNumber(cells[1].replace(/\$/g, ''))
+    if (amount == null || amount <= 0) continue
+
+    // Third cell: franking like 82%
+    const frankingMatch = cells[2].match(/(\d+)%/)
+    const frankingPct = frankingMatch ? parseInt(frankingMatch[1], 10) : 0
+
+    const [, dd, mm, yyyy] = dateMatch
+    const exDate = new Date(`${yyyy}-${mm}-${dd}T00:00:00Z`)
+    results.push({ exDate, amount, frankingPct })
+  }
+
+  return results
+}
