@@ -33,6 +33,7 @@ interface Props {
   portfolioId: string
   cashAccounts: CashAccountOption[]
   drpTickers?: Record<string, boolean>
+  currentPrices?: Record<string, number>
 }
 
 function totalAmount(item: PendingItem) {
@@ -50,12 +51,14 @@ function formatTradeDate(iso: string | null) {
   return new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-export function PendingInbox({ items: initialItems, portfolioId, cashAccounts, drpTickers = {} }: Props) {
+export function PendingInbox({ items: initialItems, portfolioId, cashAccounts, drpTickers = {}, currentPrices = {} }: Props) {
   const router = useRouter()
   const [items, setItems] = useState(initialItems)
   // Per-item type override: 'DIVIDEND' | 'DRP'
   const [typeOverrides, setTypeOverrides] = useState<Record<string, string>>({})
   const [frankingOverrides, setFrankingOverrides] = useState<Record<string, string>>({})
+  // Per-item DRP share price override (defaults to currentPrices[ticker])
+  const [drpPriceOverrides, setDrpPriceOverrides] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState<Record<string, boolean>>({})
   const [bulkLoading, setBulkLoading] = useState(false)
   const [cashAccountId, setCashAccountId] = useState('')
@@ -64,6 +67,21 @@ export function PendingInbox({ items: initialItems, portfolioId, cashAccounts, d
     if (frankingOverrides[item.id] !== undefined) return frankingOverrides[item.id]
     const m = item.parseWarnings?.match(/Franking:\s*(\d+)/)
     return m ? m[1] : ''
+  }
+
+  function getDrpSharePrice(item: PendingItem): string {
+    if (drpPriceOverrides[item.id] !== undefined) return drpPriceOverrides[item.id]
+    const cp = item.ticker ? currentPrices[item.ticker] : undefined
+    return cp != null ? cp.toFixed(4) : ''
+  }
+
+  function getDrpNewShares(item: PendingItem): number | null {
+    const total = item.quantity != null && item.price != null ? item.quantity * item.price : null
+    if (total == null) return null
+    const priceStr = getDrpSharePrice(item)
+    const sharePrice = parseFloat(priceStr)
+    if (!sharePrice || sharePrice <= 0) return null
+    return Math.round((total / sharePrice) * 10000) / 10000
   }
 
   const currency = items[0]?.currency ?? 'AUD'
@@ -78,22 +96,23 @@ export function PendingInbox({ items: initialItems, portfolioId, cashAccounts, d
     setLoading((l) => ({ ...l, [item.id]: true }))
     const type = getType(item)
     try {
-      // For DRP: quantity = shares acquired via reinvestment (same field used differently)
-      // price = per-share price of the DRP allocation
-      // The confirm endpoint uses quantity × price as `amount` for DIVIDEND
-      // For DRP, the transaction stores qty/price directly (same as BUY)
+      const overrides: Record<string, unknown> = {
+        transactionType: type,
+        frankingPct: getFranking(item) !== '' ? Number(getFranking(item)) : 0,
+      }
+      // Pass DRP share price so the server can compute new shares = total_div / drp_price
+      if (type === 'DRP') {
+        const priceStr = getDrpSharePrice(item)
+        if (priceStr) overrides.drpSharePrice = Number(priceStr)
+      }
       await fetch(`/api/pending-transactions/${item.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'confirm',
           portfolioId,
-          // Only credit cash for DIVIDEND, not DRP (DRP reinvests into shares)
           cashAccountId: type === 'DIVIDEND' && cashAccountId ? cashAccountId : undefined,
-          overrides: {
-            transactionType: type,
-            frankingPct: getFranking(item) !== '' ? Number(getFranking(item)) : 0,
-          },
+          overrides,
         }),
       })
       setItems((prev) => prev.filter((i) => i.id !== item.id))
@@ -188,9 +207,9 @@ export function PendingInbox({ items: initialItems, portfolioId, cashAccounts, d
               <tr className="border-b border-gray-100 text-left text-xs text-gray-500 uppercase tracking-wide">
                 <th className="px-6 pb-3 pt-4 font-medium">Ticker</th>
                 <th className="pb-3 pt-4 pr-4 font-medium">Ex-Date</th>
-                <th className="pb-3 pt-4 pr-4 font-medium text-right">Shares</th>
-                <th className="pb-3 pt-4 pr-4 font-medium text-right">Per Share</th>
-                <th className="pb-3 pt-4 pr-4 font-medium text-right">Total Value</th>
+                <th className="pb-3 pt-4 pr-4 font-medium text-right">Shares / New</th>
+                <th className="pb-3 pt-4 pr-4 font-medium text-right">Div/Share · DRP Price</th>
+                <th className="pb-3 pt-4 pr-4 font-medium text-right">Total Div</th>
                 <th className="pb-3 pt-4 pr-4 font-medium text-right">Franking</th>
                 <th className="pb-3 pt-4 pr-4 font-medium">Type</th>
                 <th className="pb-3 pt-4 pr-6 font-medium"></th>
@@ -202,15 +221,37 @@ export function PendingInbox({ items: initialItems, portfolioId, cashAccounts, d
                 const franking = frankingPct(item)
                 const busy = loading[item.id]
                 const type = getType(item)
+                const drpNewShares = type === 'DRP' ? getDrpNewShares(item) : null
                 return (
                   <tr key={item.id} className="hover:bg-gray-50">
                     <td className="py-3 px-6 font-semibold text-gray-900">{item.ticker ?? '—'}</td>
                     <td className="py-3 pr-4 text-gray-600 whitespace-nowrap">{formatTradeDate(item.tradeDate)}</td>
                     <td className="py-3 pr-4 text-right text-gray-700">
-                      {item.quantity?.toLocaleString(undefined, { maximumFractionDigits: 0 }) ?? '—'}
+                      {type === 'DRP' ? (
+                        <span className="text-indigo-700 font-medium">
+                          {drpNewShares != null ? `+${drpNewShares.toLocaleString(undefined, { maximumFractionDigits: 4 })}` : '—'}
+                        </span>
+                      ) : (
+                        item.quantity?.toLocaleString(undefined, { maximumFractionDigits: 0 }) ?? '—'
+                      )}
                     </td>
                     <td className="py-3 pr-4 text-right text-gray-700">
-                      {item.price != null ? `$${item.price.toFixed(4)}` : '—'}
+                      {type === 'DRP' ? (
+                        <div className="flex items-center justify-end gap-1">
+                          <span className="text-xs text-gray-400">$</span>
+                          <input
+                            type="number"
+                            min="0.0001"
+                            step="0.01"
+                            value={getDrpSharePrice(item)}
+                            onChange={(e) => setDrpPriceOverrides((o) => ({ ...o, [item.id]: e.target.value }))}
+                            className="w-20 text-sm border border-indigo-200 rounded px-2 py-0.5 bg-white text-gray-700 text-right focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                            placeholder="0.00"
+                          />
+                        </div>
+                      ) : (
+                        item.price != null ? `$${item.price.toFixed(4)}` : '—'
+                      )}
                     </td>
                     <td className="py-3 pr-4 text-right font-semibold text-emerald-700">
                       {total != null ? formatCurrency(total, currency) : '—'}

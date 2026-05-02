@@ -48,6 +48,16 @@ export default async function PortfolioInboxPage({
     rawContent: p.rawContent,
   }))
 
+  // Fetch current prices for all tickers in the pending list (for DRP share computation)
+  const pendingTickers = [...new Set(pending.map((p) => p.ticker).filter(Boolean) as string[])]
+  const priceRows = pendingTickers.length > 0
+    ? await prisma.priceCache.findMany({
+        where: { ticker: { in: pendingTickers } },
+        select: { ticker: true, price: true },
+      })
+    : []
+  const currentPrices = Object.fromEntries(priceRows.map((r) => [r.ticker, Number(r.price)]))
+
   return (
     <div className="space-y-6">
       <div>
@@ -75,6 +85,7 @@ export default async function PortfolioInboxPage({
           portfolioId={id}
           cashAccounts={cashAccounts}
           drpTickers={drpTickers}
+          currentPrices={currentPrices}
         />
       )}
     </div>

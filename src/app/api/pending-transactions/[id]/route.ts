@@ -39,11 +39,6 @@ export async function PATCH(
     const type = (overrides?.transactionType ?? pending.transactionType) as string
     const ticker = (overrides?.ticker ?? pending.ticker) as string
     const date = overrides?.tradeDate ?? pending.tradeDate
-    const quantity = Number(overrides?.quantity ?? pending.quantity ?? 0)
-    const price = Number(overrides?.price ?? pending.price ?? 0)
-    const fees = Number(overrides?.fees ?? pending.fees ?? 0)
-    // For DIVIDEND: amount = total income = shares held × per-share amount
-    const totalAmount = type === 'DIVIDEND' ? quantity * price : null
 
     // Franking: prefer explicit override, fall back to parseWarnings
     const frankingFromWarnings = pending.parseWarnings?.match(/Franking:\s*(\d+)/)
@@ -58,6 +53,47 @@ export async function PATCH(
       )
     }
 
+    // Resolve quantity, price, and amount based on transaction type.
+    // Pending items store: quantity = shares held at ex-date, price = dividend per share.
+    let quantity: number
+    let price: number
+    let totalAmount: number | null
+
+    if (type === 'DIVIDEND') {
+      // amount = total cash income = shares_held × div_per_share
+      quantity = Number(overrides?.quantity ?? pending.quantity ?? 0)
+      const divPerShare = Number(overrides?.price ?? pending.price ?? 0)
+      totalAmount = quantity * divPerShare
+      price = 0  // DIVIDEND transactions don't store a per-share price
+    } else if (type === 'DRP' && overrides?.quantity == null) {
+      // DRP: derive new shares from total dividend ÷ DRP share price.
+      // If caller passes drpSharePrice override, use it; otherwise fetch PriceCache.
+      const totalDiv = Number(pending.quantity ?? 0) * Number(pending.price ?? 0)
+      let drpSharePrice = overrides?.drpSharePrice ? Number(overrides.drpSharePrice) : null
+      if (!drpSharePrice || drpSharePrice <= 0) {
+        const pc = await prisma.priceCache.findUnique({
+          where: { ticker: ticker.toUpperCase() },
+          select: { price: true },
+        })
+        drpSharePrice = pc ? Number(pc.price) : null
+      }
+      if (drpSharePrice && drpSharePrice > 0 && totalDiv > 0) {
+        quantity = Math.round((totalDiv / drpSharePrice) * 10000) / 10000
+        price = drpSharePrice
+        totalAmount = totalDiv  // original dividend income, for tax/income tracking
+      } else {
+        // Fallback if no price available — store raw values and let user edit
+        quantity = Number(pending.quantity ?? 0)
+        price = Number(pending.price ?? 0)
+        totalAmount = null
+      }
+    } else {
+      quantity = Number(overrides?.quantity ?? pending.quantity ?? 0)
+      price = Number(overrides?.price ?? pending.price ?? 0)
+      totalAmount = null
+    }
+
+    const fees = Number(overrides?.fees ?? pending.fees ?? 0)
     const txDate = new Date(date)
 
     const tx = await prisma.$transaction(async (db) => {
@@ -68,7 +104,7 @@ export async function PATCH(
           ticker: ticker.toUpperCase(),
           date: txDate,
           quantity,
-          price: type === 'DIVIDEND' ? 0 : price,
+          price,
           fees,
           amount: totalAmount,
           frankingPct,
