@@ -13,6 +13,7 @@ export async function GET() {
     prisma.portfolio.findMany({
       where: { userId },
       include: {
+        // snapshots used only for TERM_DEPOSIT portfolios (no HistoricalPrice data)
         snapshots: { orderBy: { date: 'asc' }, select: { date: true, value: true } },
       },
     }),
@@ -49,16 +50,119 @@ export async function GET() {
 
   // ── Build per-source histories as { date: string, value: number }[] ─────────
 
-  // Sum portfolio snapshots by date, split by type
-  const sharesByDate = new Map<string, number>()
-  const tdByDate     = new Map<string, number>()
+  // TERM_DEPOSIT portfolios: use snapshots (no historical market prices to reconstruct from)
+  const tdByDate = new Map<string, number>()
   for (const p of portfolios) {
-    const map = p.portfolioType === 'TERM_DEPOSIT' ? tdByDate : sharesByDate
+    if (p.portfolioType !== 'TERM_DEPOSIT') continue
     for (const s of p.snapshots) {
       const d = toDateStr(s.date)
-      map.set(d, (map.get(d) ?? 0) + s.value)
+      tdByDate.set(d, (tdByDate.get(d) ?? 0) + s.value)
     }
   }
+
+  // SHARES portfolios: reconstruct value from transaction history × HistoricalPrice records.
+  // This avoids the stale-price problem that arises from snapshot carry-forward, where a
+  // snapshot written on a day with a cached (not freshly synced) price would be propagated
+  // to all subsequent dates.
+  const sharesByDate = new Map<string, number>()
+  const sharesPortfolioIds = portfolios
+    .filter(p => p.portfolioType !== 'TERM_DEPOSIT')
+    .map(p => p.id)
+
+  if (sharesPortfolioIds.length > 0) {
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        portfolioId: { in: sharesPortfolioIds },
+        type: { in: ['BUY', 'SELL', 'DRP'] },
+      },
+      orderBy: { date: 'asc' },
+      select: { portfolioId: true, type: true, ticker: true, date: true, quantity: true },
+    })
+
+    const tickerSet = new Set(transactions.map(t => t.ticker))
+
+    if (tickerSet.size > 0) {
+      const historicalPrices = await prisma.historicalPrice.findMany({
+        where: { ticker: { in: [...tickerSet] } },
+        orderBy: [{ ticker: 'asc' }, { date: 'asc' }],
+        select: { ticker: true, date: true, close: true },
+      })
+
+      // Build price map: ticker -> [{date, close}] sorted ascending
+      const priceMap = new Map<string, { date: string; close: number }[]>()
+      for (const hp of historicalPrices) {
+        const d = toDateStr(hp.date)
+        if (!priceMap.has(hp.ticker)) priceMap.set(hp.ticker, [])
+        priceMap.get(hp.ticker)!.push({ date: d, close: hp.close })
+      }
+
+      // Collect all dates where we have at least one price
+      const allPriceDatesSet = new Set<string>()
+      for (const prices of priceMap.values()) {
+        for (const p of prices) allPriceDatesSet.add(p.date)
+      }
+      const sortedPriceDates = [...allPriceDatesSet].sort()
+
+      // Group transactions by portfolio
+      const txnsByPortfolio = new Map<string, typeof transactions>()
+      for (const t of transactions) {
+        if (!txnsByPortfolio.has(t.portfolioId)) txnsByPortfolio.set(t.portfolioId, [])
+        txnsByPortfolio.get(t.portfolioId)!.push(t)
+      }
+
+      for (const portfolioId of sharesPortfolioIds) {
+        const txns = txnsByPortfolio.get(portfolioId) ?? []
+        if (txns.length === 0) continue
+
+        const firstDate = toDateStr(txns[0].date)
+        const holdingsMap = new Map<string, number>()
+        let txnIdx = 0
+
+        for (const date of sortedPriceDates) {
+          if (date < firstDate) continue
+
+          // Apply all transactions whose date falls on or before this price date
+          while (txnIdx < txns.length && toDateStr(txns[txnIdx].date) <= date) {
+            const t = txns[txnIdx]
+            const qty = Number(t.quantity)
+            const current = holdingsMap.get(t.ticker) ?? 0
+            if (t.type === 'BUY' || t.type === 'DRP') {
+              holdingsMap.set(t.ticker, current + qty)
+            } else {
+              holdingsMap.set(t.ticker, Math.max(0, current - qty))
+            }
+            txnIdx++
+          }
+
+          // Value = sum(holdings * historical close price) on this date
+          let value = 0
+          for (const [ticker, qty] of holdingsMap) {
+            if (qty <= 0) continue
+            const prices = priceMap.get(ticker)
+            if (!prices || prices.length === 0) continue
+            const price = carryForwardClose(prices, date)
+            if (price !== null) value += qty * price
+          }
+
+          if (value > 0) {
+            sharesByDate.set(date, (sharesByDate.get(date) ?? 0) + value)
+          }
+        }
+      }
+    }
+
+    // Fallback: if no HistoricalPrice data exists, use snapshots
+    if (sharesByDate.size === 0) {
+      for (const p of portfolios) {
+        if (p.portfolioType === 'TERM_DEPOSIT') continue
+        for (const s of p.snapshots) {
+          const d = toDateStr(s.date)
+          sharesByDate.set(d, (sharesByDate.get(d) ?? 0) + s.value)
+        }
+      }
+    }
+  }
+
   const sharesHistory = mapToSortedArray(sharesByDate)
   const tdHistory     = mapToSortedArray(tdByDate)
 
@@ -242,6 +346,16 @@ function carryForward(history: { date: string; value: number }[], targetDate: st
   let result: number | null = null
   for (const h of history) {
     if (h.date <= targetDate) result = h.value
+    else break
+  }
+  return result
+}
+
+/** Returns the last known close price for a ticker on or before `targetDate`. */
+function carryForwardClose(prices: { date: string; close: number }[], targetDate: string): number | null {
+  let result: number | null = null
+  for (const p of prices) {
+    if (p.date <= targetDate) result = p.close
     else break
   }
   return result
