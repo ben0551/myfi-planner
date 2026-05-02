@@ -28,7 +28,8 @@ interface PreviewResult {
   total: number
 }
 
-// Parse CSV text into an array of row-objects keyed by lowercased header
+// ── CSV parser ────────────────────────────────────────────────────────────────
+
 function parseCsv(text: string): { headers: string[]; rows: Record<string, string>[] } {
   const lines = text.trim().split(/\r?\n/)
   if (lines.length < 2) return { headers: [], rows: [] }
@@ -62,13 +63,68 @@ function parseCsv(text: string): { headers: string[]; rows: Record<string, strin
   return { headers, rows }
 }
 
+// ── Broker definitions ────────────────────────────────────────────────────────
+
+type BrokerKey = 'native' | 'stake' | 'commsec'
+
+interface BrokerDef {
+  label: string
+  /** Cleaned header tokens that uniquely identify this broker's export format */
+  signature: string[]
+  normalize: (row: Record<string, string>) => Record<string, string>
+}
+
+const BROKERS: Record<BrokerKey, BrokerDef> = {
+  native: {
+    label: 'MyFi native format',
+    signature: ['type', 'ticker', 'quantity'],
+    normalize: (row) => row,
+  },
+  stake: {
+    label: 'Stake',
+    signature: ['tradedate', 'symbol', 'side', 'units', 'avgprice'],
+    normalize: (row) => ({
+      date: row['tradedate'] ?? '',
+      // "Buy" → "BUY", "Sell" → "SELL"
+      type: (row['side'] ?? '').toUpperCase(),
+      // Strip exchange suffix: "ACL.ASX" → "ACL", "AAPL" stays "AAPL"
+      ticker: (row['symbol'] ?? '').replace(/\.[A-Za-z]+$/, ''),
+      quantity: row['units'] ?? '0',
+      price: row['avgprice'] ?? '0',
+      // fees + gst = total brokerage cost
+      fees: String((parseFloat(row['fees'] ?? '0') || 0) + (parseFloat(row['gst'] ?? '0') || 0)),
+      amount: '',
+      'franking%': '0',
+      notes: row['tradeidentifier'] ?? '',
+    }),
+  },
+  commsec: {
+    label: 'CommSec',
+    signature: ['datetime', 'type', 'details', 'debit', 'credit', 'balance'],
+    normalize: (row) => row, // CommSec equity exports vary; passthrough for now
+  },
+}
+
+function detectBroker(cleanedHeaders: string[]): BrokerKey {
+  const headerSet = new Set(cleanedHeaders)
+  for (const [key, def] of Object.entries(BROKERS) as [BrokerKey, BrokerDef][]) {
+    if (key === 'native') continue
+    if (def.signature.every((h) => headerSet.has(h))) return key
+  }
+  return 'native'
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
 export default function ImportTransactionsPage() {
   const params = useParams()
   const router = useRouter()
   const id = params.id as string
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const [rows, setRows] = useState<Record<string, string>[]>([])
+  const [rawRows, setRawRows] = useState<Record<string, string>[]>([])
+  const [broker, setBroker] = useState<BrokerKey>('native')
+  const [autoDetected, setAutoDetected] = useState<BrokerKey | null>(null)
   const [preview, setPreview] = useState<PreviewResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -82,14 +138,21 @@ export default function ImportTransactionsPage() {
     const reader = new FileReader()
     reader.onload = (e) => {
       const text = e.target?.result as string
-      const { rows: parsed } = parseCsv(text)
-      if (parsed.length === 0) {
+      const { headers, rows } = parseCsv(text)
+      if (rows.length === 0) {
         setFileError('No rows found. Make sure the file has a header row and at least one data row.')
         return
       }
-      setRows(parsed)
+      const detected = detectBroker(headers)
+      setBroker(detected)
+      setAutoDetected(detected)
+      setRawRows(rows)
     }
     reader.readAsText(file)
+  }
+
+  function normalizedRows() {
+    return rawRows.map(BROKERS[broker].normalize)
   }
 
   async function runPreview() {
@@ -98,7 +161,7 @@ export default function ImportTransactionsPage() {
       const res = await fetch(`/api/portfolios/${id}/import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rows, preview: true }),
+        body: JSON.stringify({ rows: normalizedRows(), preview: true }),
       })
       const data = await res.json()
       setPreview(data)
@@ -113,7 +176,7 @@ export default function ImportTransactionsPage() {
       const res = await fetch(`/api/portfolios/${id}/import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rows }),
+        body: JSON.stringify({ rows: normalizedRows() }),
       })
       if (!res.ok) {
         const data = await res.json()
@@ -143,81 +206,78 @@ export default function ImportTransactionsPage() {
       </div>
 
       {/* Format guide */}
-      <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-5 text-sm">
-        <p className="font-semibold text-indigo-800 mb-2">Expected CSV format</p>
-        <p className="text-indigo-700 mb-3">
-          The file must have a header row with these columns (order flexible, case-insensitive):
-        </p>
-        <div className="overflow-x-auto">
-          <table className="text-xs text-left border-collapse">
-            <thead>
-              <tr className="text-indigo-600">
-                {['Date', 'Type', 'Ticker', 'Quantity', 'Price', 'Fees', 'Amount', 'Franking %', 'Notes'].map((h) => (
-                  <th key={h} className="border border-indigo-200 px-2 py-1 bg-indigo-100">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="text-indigo-900">
-                <td className="border border-indigo-200 px-2 py-1">2022-03-15</td>
-                <td className="border border-indigo-200 px-2 py-1">BUY</td>
-                <td className="border border-indigo-200 px-2 py-1">CBA</td>
-                <td className="border border-indigo-200 px-2 py-1">100</td>
-                <td className="border border-indigo-200 px-2 py-1">98.50</td>
-                <td className="border border-indigo-200 px-2 py-1">9.95</td>
-                <td className="border border-indigo-200 px-2 py-1"></td>
-                <td className="border border-indigo-200 px-2 py-1">0</td>
-                <td className="border border-indigo-200 px-2 py-1"></td>
-              </tr>
-              <tr className="text-indigo-900">
-                <td className="border border-indigo-200 px-2 py-1">2023-09-01</td>
-                <td className="border border-indigo-200 px-2 py-1">DIVIDEND</td>
-                <td className="border border-indigo-200 px-2 py-1">CBA</td>
-                <td className="border border-indigo-200 px-2 py-1">0</td>
-                <td className="border border-indigo-200 px-2 py-1">0</td>
-                <td className="border border-indigo-200 px-2 py-1">0</td>
-                <td className="border border-indigo-200 px-2 py-1">215.00</td>
-                <td className="border border-indigo-200 px-2 py-1">100</td>
-                <td className="border border-indigo-200 px-2 py-1">Interim div</td>
-              </tr>
-            </tbody>
-          </table>
+      <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-5 text-sm space-y-3">
+        <p className="font-semibold text-indigo-800">Supported formats</p>
+        <div className="flex flex-wrap gap-2 text-xs">
+          {(Object.entries(BROKERS) as [BrokerKey, BrokerDef][]).map(([key, def]) => (
+            <span key={key} className="bg-white border border-indigo-200 text-indigo-700 rounded-full px-3 py-1 font-medium">
+              {def.label}
+            </span>
+          ))}
         </div>
-        <p className="mt-3 text-indigo-600">
-          Type must be <strong>BUY</strong>, <strong>SELL</strong>, or <strong>DIVIDEND</strong>.
-          You can export your existing transactions as a template using the Export button on the transactions page.
+        <p className="text-indigo-700">
+          Upload a CSV export from any supported broker and the format will be detected automatically.
+          For the native format, columns must include: Date, Type (BUY/SELL/DIVIDEND), Ticker, Quantity, Price, Fees, Amount, Franking&nbsp;%, Notes.
         </p>
       </div>
 
       {/* File picker */}
       {!done && (
-        <div
-          className="border-2 border-dashed border-gray-300 rounded-xl p-10 text-center hover:border-indigo-400 transition-colors cursor-pointer"
-          onClick={() => fileRef.current?.click()}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => {
-            e.preventDefault()
-            const file = e.dataTransfer.files[0]
-            if (file) handleFile(file)
-          }}
-        >
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".csv,text/csv"
-            className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
-          />
-          <p className="text-gray-500 text-sm">
-            {rows.length > 0
-              ? <span className="text-indigo-700 font-medium">{rows.length} rows loaded — ready to preview</span>
-              : 'Click or drag a CSV file here'}
-          </p>
-          {fileError && <p className="mt-2 text-sm text-red-600">{fileError}</p>}
+        <div className="space-y-3">
+          <div
+            className="border-2 border-dashed border-gray-300 rounded-xl p-10 text-center hover:border-indigo-400 transition-colors cursor-pointer"
+            onClick={() => fileRef.current?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault()
+              const file = e.dataTransfer.files[0]
+              if (file) handleFile(file)
+            }}
+          >
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
+            />
+            <p className="text-gray-500 text-sm">
+              {rawRows.length > 0
+                ? <span className="text-indigo-700 font-medium">{rawRows.length} rows loaded — ready to preview</span>
+                : 'Click or drag a CSV file here'}
+            </p>
+            {fileError && <p className="mt-2 text-sm text-red-600">{fileError}</p>}
+          </div>
+
+          {/* Broker selector — shown after file is loaded */}
+          {rawRows.length > 0 && (
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-gray-500">Format:</span>
+              <select
+                value={broker}
+                onChange={(e) => { setBroker(e.target.value as BrokerKey); setPreview(null) }}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                {(Object.entries(BROKERS) as [BrokerKey, BrokerDef][]).map(([key, def]) => (
+                  <option key={key} value={key}>{def.label}</option>
+                ))}
+              </select>
+              {autoDetected && autoDetected === broker && broker !== 'native' && (
+                <span className="text-xs text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">
+                  ✓ Auto-detected
+                </span>
+              )}
+              {autoDetected === 'native' && (
+                <span className="text-xs text-gray-500">
+                  Format not recognised — using native. Select a broker above if needed.
+                </span>
+              )}
+            </div>
+          )}
         </div>
       )}
 
-      {rows.length > 0 && !preview && !done && (
+      {rawRows.length > 0 && !preview && !done && (
         <div className="flex justify-end">
           <Button onClick={runPreview} loading={loading}>Preview Import</Button>
         </div>
@@ -280,7 +340,7 @@ export default function ImportTransactionsPage() {
 
               {preview.errors.length === 0 && (
                 <div className="flex justify-end gap-3">
-                  <Button variant="secondary" onClick={() => { setPreview(null); setRows([]) }}>
+                  <Button variant="secondary" onClick={() => { setPreview(null); setRawRows([]); setAutoDetected(null) }}>
                     Cancel
                   </Button>
                   <Button onClick={runImport} loading={importing}>
