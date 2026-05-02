@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/Input'
+import { LabelledCurrencyInput } from '@/components/ui/CurrencyInput'
 import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
 
@@ -115,15 +116,13 @@ export function SuperAccountForm({ accountId, initialValues }: Props) {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Input
+        <LabelledCurrencyInput
           label="Current Balance"
-          type="number"
-          min="0"
-          step="1"
           required
-          placeholder="75000"
+          placeholder="75,000"
+          decimalScale={2}
           value={values.currentBalance}
-          onChange={(e) => set('currentBalance', e.target.value)}
+          onChange={(v) => set('currentBalance', v)}
         />
         <Select
           label="Currency"
