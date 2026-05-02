@@ -30,14 +30,24 @@ export default async function WealthPage() {
     }),
   ])
 
-  const snapshots = await Promise.all(
-    portfolios.map((p) => prisma.portfolioSnapshot.findFirst({ where: { portfolioId: p.id }, orderBy: { date: 'desc' } }))
-  )
+  const allSnapshots = await prisma.portfolioSnapshot.findMany({
+    where: { portfolioId: { in: portfolios.map((p) => p.id) } },
+    orderBy: { date: 'desc' },
+    select: { portfolioId: true, value: true },
+  })
+  const snapshotValueMap = new Map<string, number>()
+  for (const s of allSnapshots) {
+    if (!snapshotValueMap.has(s.portfolioId)) snapshotValueMap.set(s.portfolioId, s.value)
+  }
 
-  const sharesValue = snapshots.reduce((s, snap, i) => portfolios[i].portfolioType !== 'TERM_DEPOSIT' ? s + (snap?.value ?? 0) : s, 0)
-  const tdValue     = snapshots.reduce((s, snap, i) => portfolios[i].portfolioType === 'TERM_DEPOSIT' ? s + (snap?.value ?? 0) : s, 0)
+  let sharesValue = 0, tdValue = 0
+  for (const p of portfolios) {
+    const v = snapshotValueMap.get(p.id) ?? 0
+    if (p.portfolioType === 'TERM_DEPOSIT') tdValue += v
+    else sharesValue += v
+  }
   const propertyGrossValue = properties.reduce((s, p) => s + p.currentValue * (p.ownershipPct / 100), 0)
-  const totalMortgages = properties.reduce((s, p) => s + (p.mortgage?.currentBalance ?? 0), 0)
+  const totalMortgages = properties.reduce((s, p) => s + (p.mortgage?.currentBalance ?? 0) * (p.ownershipPct / 100), 0)
   const propertyEquity = propertyGrossValue - totalMortgages
   const superBalance = superAccounts.reduce((s, a) => s + a.currentBalance, 0)
   const cashBalance = cashAccounts.reduce((s, a) => s + a.balance, 0)
@@ -48,17 +58,14 @@ export default async function WealthPage() {
   const settings = fireSettings ?? { includePropertyEquity: true, includeSuper: true, includeCash: true }
   const netWorth = computeNetWorth(snap, settings)
 
-  const fireNumber = fireSettings ? fireSettings.annualExpenses / (fireSettings.withdrawalRate / 100) : null
-  const fireProgress = fireNumber && fireNumber > 0 ? Math.min(100, (netWorth / fireNumber) * 100) : null
-
-  // Portfolio snapshot map for goals progress
-  const snapshotMap = new Map(
-    portfolios.map((p, i) => [p.id, snapshots[i]?.value ?? 0])
-  )
+  const fireNumber = (fireSettings && fireSettings.withdrawalRate > 0 && fireSettings.annualExpenses > 0)
+    ? fireSettings.annualExpenses / (fireSettings.withdrawalRate / 100)
+    : null
+  const fireProgress = fireNumber ? Math.min(100, (netWorth / fireNumber) * 100) : null
 
   // Goals with progress — VALUE goals compare portfolio value to target
   const goalsWithProgress = allGoals.map((g) => {
-    const portfolioValue = snapshotMap.get(g.portfolioId) ?? 0
+    const portfolioValue = snapshotValueMap.get(g.portfolioId) ?? 0
     const pct = g.targetValue > 0 ? Math.min(100, (portfolioValue / g.targetValue) * 100) : 0
     const daysLeft = g.targetDate ? Math.ceil((g.targetDate.getTime() - Date.now()) / 86400000) : null
     return { ...g, portfolioValue, pct, daysLeft }
@@ -153,7 +160,7 @@ export default async function WealthPage() {
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm divide-y divide-gray-100">
 
             {/* Investment portfolios */}
-            {portfolios.map((p, i) => (
+            {portfolios.map((p) => (
               <Link key={p.id} href={`/portfolios/${p.id}`} className="flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors group">
                 <div className="flex items-center gap-3">
                   <span className="text-lg">{p.portfolioType === 'TERM_DEPOSIT' ? '💵' : '📈'}</span>
@@ -163,7 +170,7 @@ export default async function WealthPage() {
                   </div>
                 </div>
                 <span className="text-sm font-semibold text-gray-900">
-                  {formatCurrency(snapshots[i]?.value ?? 0)}
+                  {formatCurrency(snapshotValueMap.get(p.id) ?? 0)}
                 </span>
               </Link>
             ))}
@@ -257,7 +264,7 @@ export default async function WealthPage() {
                   <div className="ml-9">
                     <div className="flex justify-between text-xs text-gray-400 mb-1">
                       <span>LVR {lvr.toFixed(1)}%</span>
-                      <span>Equity {formatCurrency(p.currentValue * (p.ownershipPct / 100) - p.mortgage!.currentBalance, p.currency)}</span>
+                      <span>Equity {formatCurrency((p.currentValue - p.mortgage!.currentBalance) * (p.ownershipPct / 100), p.currency)}</span>
                     </div>
                     <div className="w-full bg-gray-100 rounded-full h-1.5">
                       <div

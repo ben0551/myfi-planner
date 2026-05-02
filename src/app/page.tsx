@@ -97,8 +97,10 @@ export default async function DashboardPage() {
   const settings = fireSettings ?? { includePropertyEquity: true, includeSuper: true, includeCash: true }
   const netWorth = computeNetWorth(snap, settings)
 
-  const fireNumber = fireSettings ? fireSettings.annualExpenses / (fireSettings.withdrawalRate / 100) : null
-  const fireProgress = fireNumber && fireNumber > 0 ? Math.min(100, (netWorth / fireNumber) * 100) : null
+  const fireNumber = (fireSettings && fireSettings.withdrawalRate > 0 && fireSettings.annualExpenses > 0)
+    ? fireSettings.annualExpenses / (fireSettings.withdrawalRate / 100)
+    : null
+  const fireProgress = fireNumber ? Math.min(100, (netWorth / fireNumber) * 100) : null
 
   void recordNetWorthSnapshot(userId, {
     totalAssets, totalLiabilities, netWorth,

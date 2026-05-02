@@ -81,16 +81,18 @@ export async function PATCH(
         })
         drpSharePrice = pc ? Number(pc.price) : null
       }
-      if (drpSharePrice && drpSharePrice > 0 && totalDiv > 0) {
-        quantity = Math.round((totalDiv / drpSharePrice) * 10000) / 10000
-        price = drpSharePrice
-        totalAmount = totalDiv  // original dividend income, for tax/income tracking
-      } else {
-        // Fallback if no price available — store raw values and let user edit
-        quantity = Number(pending.quantity ?? 0)
-        price = Number(pending.price ?? 0)
-        totalAmount = null
+      if (!drpSharePrice || drpSharePrice <= 0) {
+        return Response.json(
+          { error: 'DRP share price is required — enter a price before confirming' },
+          { status: 400 }
+        )
       }
+      if (totalDiv <= 0) {
+        return Response.json({ error: 'Dividend amount is zero — cannot compute DRP shares' }, { status: 400 })
+      }
+      quantity = Math.round((totalDiv / drpSharePrice) * 10000) / 10000
+      price = drpSharePrice
+      totalAmount = totalDiv
     } else {
       quantity = Number(overrides?.quantity ?? pending.quantity ?? 0)
       price = Number(overrides?.price ?? pending.price ?? 0)
@@ -99,6 +101,19 @@ export async function PATCH(
 
     const fees = Number(overrides?.fees ?? pending.fees ?? 0)
     const txDate = new Date(date)
+
+    // Pre-validate cash account ownership before starting the transaction
+    let cashAccount: { id: string; balance: number } | null = null
+    if (cashAccountId && totalAmount && totalAmount > 0) {
+      const acct = await prisma.cashAccount.findUnique({
+        where: { id: cashAccountId },
+        select: { id: true, balance: true, userId: true },
+      })
+      if (!acct || (!isAdmin && acct.userId !== session.user.id)) {
+        return Response.json({ error: 'Cash account not found or access denied' }, { status: 400 })
+      }
+      cashAccount = { id: acct.id, balance: acct.balance }
+    }
 
     const tx = await prisma.$transaction(async (db) => {
       const created = await db.transaction.create({
@@ -117,21 +132,18 @@ export async function PATCH(
         },
       })
 
-      // Optionally credit dividend proceeds to a cash account
-      if (cashAccountId && totalAmount && totalAmount > 0) {
-        const account = await db.cashAccount.findUnique({ where: { id: cashAccountId } })
-        if (account && (isAdmin || account.userId === session.user.id)) {
-          const newBalance = account.balance + totalAmount
-          await db.cashAccount.update({
-            where: { id: cashAccountId },
-            data: { balance: newBalance, balanceUpdatedAt: txDate },
-          })
-          await db.cashBalanceHistory.upsert({
-            where: { accountId_date: { accountId: cashAccountId, date: txDate } },
-            update: { balance: newBalance },
-            create: { accountId: cashAccountId, balance: newBalance, date: txDate },
-          })
-        }
+      // Credit dividend proceeds to the pre-validated cash account
+      if (cashAccount && totalAmount && totalAmount > 0) {
+        const newBalance = cashAccount.balance + totalAmount
+        await db.cashAccount.update({
+          where: { id: cashAccount.id },
+          data: { balance: newBalance, balanceUpdatedAt: txDate },
+        })
+        await db.cashBalanceHistory.upsert({
+          where: { accountId_date: { accountId: cashAccount.id, date: txDate } },
+          update: { balance: newBalance },
+          create: { accountId: cashAccount.id, balance: newBalance, date: txDate },
+        })
       }
 
       await db.pendingTransaction.update({
