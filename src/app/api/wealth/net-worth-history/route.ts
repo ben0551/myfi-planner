@@ -82,11 +82,19 @@ export async function GET() {
     const tickerSet = new Set(transactions.map(t => t.ticker))
 
     if (tickerSet.size > 0) {
-      const historicalPrices = await prisma.historicalPrice.findMany({
-        where: { ticker: { in: [...tickerSet] } },
-        orderBy: [{ ticker: 'asc' }, { date: 'asc' }],
-        select: { ticker: true, date: true, close: true },
-      })
+      const [historicalPrices, priceCacheRows] = await Promise.all([
+        prisma.historicalPrice.findMany({
+          where: { ticker: { in: [...tickerSet] } },
+          orderBy: [{ ticker: 'asc' }, { date: 'asc' }],
+          select: { ticker: true, date: true, close: true },
+        }),
+        // PriceCache gives accurate current prices for all tickers, including those
+        // that may lack HistoricalPrice records (e.g. recently added, never synced)
+        prisma.priceCache.findMany({
+          where: { ticker: { in: [...tickerSet] } },
+          select: { ticker: true, price: true },
+        }),
+      ])
 
       // Build price map: ticker -> [{date, close}] sorted ascending
       const priceMap = new Map<string, { date: string; close: number }[]>()
@@ -96,8 +104,14 @@ export async function GET() {
         priceMap.get(hp.ticker)!.push({ date: d, close: hp.close })
       }
 
-      // Collect all dates where we have at least one price
-      const allPriceDatesSet = new Set<string>()
+      // Current price lookup (used for today's data point and as fallback for tickers
+      // with no historical price records)
+      const priceCacheMap = new Map<string, number>()
+      for (const pc of priceCacheRows) priceCacheMap.set(pc.ticker, Number(pc.price))
+
+      // Collect all dates where we have at least one price, plus today
+      const todayStr = toDateStr(new Date())
+      const allPriceDatesSet = new Set<string>([todayStr])
       for (const prices of priceMap.values()) {
         for (const p of prices) allPriceDatesSet.add(p.date)
       }
@@ -134,13 +148,24 @@ export async function GET() {
             txnIdx++
           }
 
-          // Value = sum(holdings * historical close price) on this date
+          // Value = sum(holdings * price) at this date.
+          // Priority: (1) PriceCache for today, (2) HistoricalPrice carry-forward,
+          // (3) PriceCache as constant fallback for tickers with no historical data.
           let value = 0
           for (const [ticker, qty] of holdingsMap) {
             if (qty <= 0) continue
-            const prices = priceMap.get(ticker)
-            if (!prices || prices.length === 0) continue
-            const price = carryForwardClose(prices, date)
+            let price: number | null = null
+            if (date === todayStr) {
+              price = priceCacheMap.get(ticker) ?? null
+            }
+            if (price === null) {
+              const prices = priceMap.get(ticker)
+              if (prices && prices.length > 0) price = carryForwardClose(prices, date)
+            }
+            // Last resort: use current PriceCache price as constant for tickers that
+            // have never been synced to HistoricalPrice. Imprecise historically but
+            // far better than omitting the holding entirely.
+            if (price === null) price = priceCacheMap.get(ticker) ?? null
             if (price !== null) value += qty * price
           }
 
