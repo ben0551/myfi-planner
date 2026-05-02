@@ -6,6 +6,7 @@ import { getCachedAsxQuotes } from '@/lib/asx/cache'
 import { computePortfolioPerformance } from '@/lib/calculations'
 import { computeCGTReport, currentFY, getFYLabel } from '@/lib/tax'
 import { HoldingsTable } from '@/components/portfolio/HoldingsTable'
+import { ReconcileModal } from '@/components/portfolio/ReconcileModal'
 import { PerformanceSummary } from '@/components/portfolio/PerformanceSummary'
 import { AllocationChart } from '@/components/portfolio/AllocationChart'
 import { DividendsSection } from '@/components/portfolio/DividendsSection'
@@ -294,7 +295,10 @@ export default async function PortfolioPage({
         <Card padding={false}>
           <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
             <h2 className="font-semibold text-gray-900">Holdings</h2>
-            <span className="text-sm text-gray-500">{performance.holdings.length} stocks</span>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-500">{performance.holdings.length} stocks</span>
+              <ReconcileModal portfolioId={id} holdings={performance.holdings} />
+            </div>
           </div>
           <div className="p-6">
             <HoldingsTable holdings={performance.holdings} currency={portfolio.currency} portfolioId={id} drpTickers={drpTickers} />
