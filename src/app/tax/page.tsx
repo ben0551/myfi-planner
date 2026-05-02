@@ -6,6 +6,8 @@ import { computeCGTReport, computeDividendReport, availableFYs, currentFY, getFY
 import { Card } from '@/components/ui/Card'
 import { TaxDisclaimer } from '@/components/tax/TaxDisclaimer'
 import { FYSelector } from '@/components/tax/FYSelector'
+import { MarginalRateSelector } from '@/components/tax/MarginalRateSelector'
+import { BackfillFrankingButton } from '@/components/tax/BackfillFrankingButton'
 import { formatCurrency, gainClass } from '@/lib/formatters'
 
 export const dynamic = 'force-dynamic'
@@ -13,14 +15,15 @@ export const dynamic = 'force-dynamic'
 export default async function TaxSummaryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ fy?: string }>
+  searchParams: Promise<{ fy?: string; rate?: string }>
 }) {
   const session = await auth()
   if (!session) redirect('/login')
 
-  const { fy } = await searchParams
+  const { fy, rate } = await searchParams
 
   const fyYear = fy ? parseInt(fy, 10) : currentFY()
+  const marginalRate = rate ? parseFloat(rate) : 47
   const fyLabel = getFYLabel(fyYear)
 
   const fyStart = new Date(Date.UTC(fyYear - 1, 6, 1))
@@ -81,6 +84,12 @@ export default async function TaxSummaryPage({
     grossedUp:        perPortfolio.reduce((s, r) => s + r.div.totalGrossedUp, 0),
   }
   const totalAssessable = agg.netAssessableGain + agg.grossedUp
+
+  // Estimated dividend tax liability at chosen marginal rate
+  const divTaxGross    = agg.grossedUp * (marginalRate / 100)
+  const divNetTax      = divTaxGross - agg.frankingCredits   // may be negative (refund)
+  const frankingRefund = divNetTax < 0 ? Math.abs(divNetTax) : 0
+  const divTaxPayable  = Math.max(0, divNetTax)
 
   return (
     <div className="space-y-6">
@@ -149,9 +158,12 @@ export default async function TaxSummaryPage({
 
           {/* Dividend summary */}
           <div>
-            <h2 className="text-sm font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-3">
-              Dividend Income
-            </h2>
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <h2 className="text-sm font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                Dividend Income
+              </h2>
+              {agg.cashDividends > 0 && agg.frankingCredits === 0 && <BackfillFrankingButton />}
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Card>
                 <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Cash Dividends</p>
@@ -170,6 +182,52 @@ export default async function TaxSummaryPage({
                 <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Grossed-Up Total</p>
                 <p className="text-2xl font-bold mt-1 text-gray-900 dark:text-white">
                   {formatCurrency(agg.grossedUp, currency)}
+                </p>
+              </Card>
+            </div>
+          </div>
+
+          {/* Estimated dividend tax liability */}
+          <div>
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <h2 className="text-sm font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                Estimated Dividend Tax Liability
+              </h2>
+              <MarginalRateSelector currentRate={marginalRate} />
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card>
+                <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Grossed-Up Income</p>
+                <p className="text-xl font-bold mt-1 text-gray-900 dark:text-white">
+                  {formatCurrency(agg.grossedUp, currency)}
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">Cash + franking credits</p>
+              </Card>
+              <Card>
+                <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Tax at {marginalRate}%</p>
+                <p className="text-xl font-bold mt-1 text-red-600">
+                  {formatCurrency(divTaxGross, currency)}
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">Before franking offset</p>
+              </Card>
+              <Card>
+                <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Franking Offset</p>
+                <p className="text-xl font-bold mt-1 text-emerald-600">
+                  {agg.frankingCredits > 0 ? `−${formatCurrency(agg.frankingCredits, currency)}` : '—'}
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">Credit against tax payable</p>
+              </Card>
+              <Card className={frankingRefund > 0 ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30' : 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30'}>
+                <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">
+                  {frankingRefund > 0 ? 'Franking Refund' : 'Net Tax Payable'}
+                </p>
+                <p className={`text-xl font-bold mt-1 ${frankingRefund > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}`}>
+                  {frankingRefund > 0
+                    ? formatCurrency(frankingRefund, currency)
+                    : formatCurrency(divTaxPayable, currency)}
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {frankingRefund > 0 ? 'Excess franking credit refunded' : 'Estimated liability'}
                 </p>
               </Card>
             </div>
