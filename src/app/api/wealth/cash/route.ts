@@ -30,5 +30,14 @@ export async function POST(request: NextRequest) {
       notes,
     },
   })
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  await prisma.cashBalanceHistory.upsert({
+    where: { accountId_date: { accountId: account.id, date: today } },
+    update: { balance },
+    create: { accountId: account.id, date: today, balance },
+  })
+
   return Response.json(account, { status: 201 })
 }

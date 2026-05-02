@@ -268,6 +268,9 @@ export default function ImportTransactionsPage() {
           .catch(() => {})
       }
 
+      // Backfill portfolio snapshots from historical prices (fire-and-forget)
+      fetch(`/api/portfolios/${id}/backfill-history`, { method: 'POST' }).catch(() => {})
+
       setTimeout(() => router.push(`/portfolios/${id}/transactions`), 1500)
     } finally {
       setImporting(false)

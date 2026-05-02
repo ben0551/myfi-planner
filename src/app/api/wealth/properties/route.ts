@@ -46,5 +46,20 @@ export async function POST(request: NextRequest) {
     },
     include: { mortgage: true },
   })
+
+  // Record initial value history entries
+  const purchaseDateObj = new Date(purchaseDate)
+  purchaseDateObj.setHours(0, 0, 0, 0)
+  const historyEntries: { propertyId: string; date: Date; value: number }[] = [
+    { propertyId: property.id, date: purchaseDateObj, value: purchasePrice },
+  ]
+  const todayMidnight = new Date()
+  todayMidnight.setHours(0, 0, 0, 0)
+  // Add today's value if different from purchase price (i.e. already appreciated/depreciated)
+  if (currentValue !== purchasePrice && purchaseDateObj < todayMidnight) {
+    historyEntries.push({ propertyId: property.id, date: todayMidnight, value: currentValue })
+  }
+  await prisma.propertyValueHistory.createMany({ data: historyEntries, skipDuplicates: true })
+
   return Response.json(property, { status: 201 })
 }

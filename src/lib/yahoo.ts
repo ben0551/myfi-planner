@@ -275,10 +275,10 @@ export async function getYfHistoryFromDate(ticker: string, fromDate: Date): Prom
   }
 }
 
-/** Full 2-year history fetch — used for initial population */
+/** Full 5-year history fetch — used for initial population and backfill */
 export async function getYfHistoryFull(ticker: string): Promise<YfHistoryPoint[]> {
   try {
-    const chart = await fetchChart(ticker, '2y')
+    const chart = await fetchChart(ticker, '5y')
     if (!chart) return []
     return parseChartToHistory(chart)
   } catch {

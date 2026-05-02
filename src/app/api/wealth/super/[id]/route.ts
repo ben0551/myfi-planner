@@ -47,6 +47,17 @@ export async function PUT(
       ...(balanceChanged ? { balanceUpdatedAt: new Date() } : {}),
     },
   })
+
+  if (balanceChanged) {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    await prisma.superBalanceHistory.upsert({
+      where: { accountId_date: { accountId: id, date: today } },
+      update: { balance: currentBalance },
+      create: { accountId: id, date: today, balance: currentBalance },
+    })
+  }
+
   return Response.json(account)
 }
 

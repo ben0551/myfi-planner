@@ -33,6 +33,8 @@ export async function PUT(
     notes,
   } = body
 
+  const valueChanged = currentValue !== undefined && currentValue !== owned.currentValue
+
   const property = await prisma.property.update({
     where: { id },
     data: {
@@ -48,6 +50,17 @@ export async function PUT(
     },
     include: { mortgage: true },
   })
+
+  if (valueChanged) {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    await prisma.propertyValueHistory.upsert({
+      where: { propertyId_date: { propertyId: id, date: today } },
+      update: { value: currentValue },
+      create: { propertyId: id, date: today, value: currentValue },
+    })
+  }
+
   return Response.json(property)
 }
 
