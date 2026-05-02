@@ -138,8 +138,9 @@ const BROKERS: Record<BrokerKey, BrokerDef> = {
       type: (row['side'] ?? '').toUpperCase(),
       // Strip exchange suffix: "ACL.ASX" → "ACL", "AAPL" stays "AAPL"
       ticker: (row['symbol'] ?? '').replace(/\.[A-Za-z]+$/, ''),
-      quantity: row['units'] ?? '0',
-      price: row['avgprice'] ?? '0',
+      // Stake uses negative units/price for SELL — normalise to positive
+      quantity: String(Math.abs(parseFloat(row['units'] ?? '0') || 0)),
+      price: String(Math.abs(parseFloat(row['avgprice'] ?? '0') || 0)),
       // fees + gst = total brokerage cost
       fees: String((parseFloat(row['fees'] ?? '0') || 0) + (parseFloat(row['gst'] ?? '0') || 0)),
       amount: '',
