@@ -15,7 +15,6 @@ const investItems = [
   { href: '/screener', label: 'Screener', icon: '🔎' },
   { href: '/income', label: 'Income', icon: '💰' },
   { href: '/transactions', label: 'Transactions', icon: '🔍' },
-  { href: '/tax', label: 'Tax', icon: '🧾' },
 ]
 
 // Money: wealth and budget pages
@@ -26,7 +25,16 @@ const moneyItems = [
   { href: '/bank-import', label: 'Bank Import', icon: '📥' },
 ]
 
-const allNavItems = [...investItems, ...moneyItems]
+// Reports: cross-portfolio tax and performance reports
+const reportItems = [
+  { href: '/reports/tax/cgt', label: 'Capital Gains', icon: '📊' },
+  { href: '/reports/tax/income', label: 'Tax Income', icon: '💵' },
+  { href: '/reports/tax/all-trades', label: 'All Trades', icon: '📋' },
+  { href: '/reports/performance', label: 'Performance', icon: '📈' },
+  { href: '/tax', label: 'Tax Summary', icon: '🧾' },
+]
+
+const allNavItems = [...investItems, ...moneyItems, ...reportItems]
 
 const leftItems = [
   { href: '/', label: 'Dashboard' },
@@ -58,7 +66,7 @@ function NavDropdown({ label: defaultLabel, items, pathname }: {
 
   const active = items.find((i) => pathname.startsWith(i.href))
   const isActive = !!active
-  const label = active?.label ?? defaultLabel
+  const label = defaultLabel
 
   return (
     <div ref={ref} className="relative">
@@ -263,6 +271,7 @@ export function Navbar() {
               })}
               <NavDropdown label="Invest" items={investItems} pathname={pathname} />
               <NavDropdown label="Money" items={moneyItems} pathname={pathname} />
+              <NavDropdown label="Reports" items={reportItems} pathname={pathname} />
               {rightItems.map((item) => {
                 const active = pathname.startsWith(item.href)
                 return (

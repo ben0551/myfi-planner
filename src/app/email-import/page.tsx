@@ -20,6 +20,7 @@ export default function EmailImportPage() {
   const [savedCount, setSavedCount] = useState(0)
 
   const { data: portfolios = [] } = useSWR('/api/portfolios', fetcher)
+  const { data: cashAccounts = [] } = useSWR('/api/wealth/cash', fetcher)
 
   function handleParsed(result: ParsedTransaction, raw: string) {
     setParsed(result)
@@ -144,7 +145,7 @@ export default function EmailImportPage() {
                 </span>
               )}
             </h2>
-            <PendingList portfolios={portfolios} />
+            <PendingList portfolios={portfolios} cashAccounts={cashAccounts} />
           </Card>
         </div>
       </div>

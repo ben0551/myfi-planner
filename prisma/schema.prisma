@@ -120,6 +120,7 @@ model Portfolio {
   priceAlerts         PriceAlert[]
   snapshots           PortfolioSnapshot[]
   goals               Goal[]
+  tickerSettings      TickerSetting[]
 
   @@index([userId])
 }
@@ -163,6 +164,7 @@ enum TransactionType {
   BUY
   SELL
   DIVIDEND
+  DRP
 }
 
 model PendingTransaction {
@@ -325,6 +327,14 @@ model Property {
   ownershipPct  Float                  @default(100)           // 0–100
   currency      String                 @default("AUD")
   notes         String?
+  // Sale fields — set when property is sold, cleared on unsell
+  soldDate             DateTime?
+  salePrice            Float?
+  costBase             Float?             // CGT cost base (purchase price + costs + improvements)
+  mortgagePayoutAmount Float?             // amount deducted from mortgage at sale (to reverse on unsell)
+  saleCashAccountId    String?            // cash account credited at sale (to reverse on unsell)
+  saleCashAmount       Float?             // amount added to cash account at sale (to reverse on unsell)
+  preSaleValue         Float?             // currentValue before sale (restored on unsell)
   createdAt     DateTime               @default(now())
   updatedAt     DateTime               @updatedAt
   user          User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -431,6 +441,7 @@ model NetWorthSnapshot {
   totalLiabilities Float
   netWorth        Float
   sharesValue     Float    @default(0)
+  tdValue         Float    @default(0)
   propertyValue   Float    @default(0)
   superBalance    Float    @default(0)
   cashBalance     Float    @default(0)
@@ -565,4 +576,18 @@ model BudgetActual {
 
   @@unique([categoryId, year, month])
   @@index([userId, year, month])
+}
+
+
+model TickerSetting {
+  id          String    @id @default(cuid())
+  portfolioId String
+  ticker      String
+  drpEnabled  Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@unique([portfolioId, ticker])
+  @@index([portfolioId])
 }

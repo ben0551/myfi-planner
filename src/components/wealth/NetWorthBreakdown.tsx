@@ -11,6 +11,7 @@ import {
 
 interface Props {
   sharesValue: number
+  tdValue: number
   propertyEquity: number
   superBalance: number
   cashBalance: number
@@ -18,10 +19,11 @@ interface Props {
 }
 
 const SLICES = [
-  { key: 'sharesValue', label: 'Shares', color: '#6366f1' },
+  { key: 'sharesValue',   label: 'Shares',         color: '#6366f1' },
+  { key: 'tdValue',       label: 'Term Deposits',  color: '#0ea5e9' },
   { key: 'propertyEquity', label: 'Property Equity', color: '#10b981' },
-  { key: 'superBalance', label: 'Super', color: '#f59e0b' },
-  { key: 'cashBalance', label: 'Cash', color: '#0ea5e9' },
+  { key: 'superBalance',  label: 'Super',          color: '#f59e0b' },
+  { key: 'cashBalance',   label: 'Cash',           color: '#a78bfa' },
 ] as const
 
 function formatCompact(value: number, currency: string) {
@@ -35,6 +37,7 @@ function formatCompact(value: number, currency: string) {
 
 export function NetWorthBreakdown({
   sharesValue,
+  tdValue,
   propertyEquity,
   superBalance,
   cashBalance,
@@ -42,6 +45,7 @@ export function NetWorthBreakdown({
 }: Props) {
   const values: Record<string, number> = {
     sharesValue,
+    tdValue,
     propertyEquity,
     superBalance,
     cashBalance,

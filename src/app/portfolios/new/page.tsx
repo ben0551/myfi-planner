@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
@@ -25,6 +25,14 @@ const interestFreqOptions = [
   { value: 'QUARTERLY',   label: 'Quarterly' },
 ]
 
+interface CashAccount {
+  id: string
+  name: string
+  institution: string | null
+  balance: number
+  currency: string
+}
+
 export default function NewPortfolioPage() {
   const router = useRouter()
   const [name, setName] = useState('')
@@ -33,16 +41,29 @@ export default function NewPortfolioPage() {
   const [portfolioType, setPortfolioType] = useState('SHARES')
 
   // TD fields
-  const [tdPrincipal, setTdPrincipal]   = useState('')
-  const [tdRate, setTdRate]             = useState('')
-  const [tdTermMonths, setTdTermMonths] = useState('')
-  const [tdStartDate, setTdStartDate]   = useState('')
+  const [tdPrincipal, setTdPrincipal]       = useState('')
+  const [tdRate, setTdRate]                 = useState('')
+  const [tdTermMonths, setTdTermMonths]     = useState('')
+  const [tdStartDate, setTdStartDate]       = useState('')
   const [tdInterestFreq, setTdInterestFreq] = useState('AT_MATURITY')
+
+  // Cash deduction
+  const [cashAccounts, setCashAccounts]           = useState<CashAccount[]>([])
+  const [fundFromCashId, setFundFromCashId]       = useState('')
 
   const [loading, setLoading] = useState(false)
   const [error, setError]   = useState('')
 
   const isTd = portfolioType === 'TERM_DEPOSIT'
+
+  useEffect(() => {
+    if (isTd && cashAccounts.length === 0) {
+      fetch('/api/wealth/cash')
+        .then((r) => r.json())
+        .then((data: CashAccount[]) => setCashAccounts(data ?? []))
+        .catch(() => {})
+    }
+  }, [isTd, cashAccounts.length])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -70,6 +91,20 @@ export default function NewPortfolioPage() {
         return
       }
       const portfolio = await res.json()
+
+      // Deduct principal from the selected cash account
+      if (isTd && fundFromCashId) {
+        const sourceAccount = cashAccounts.find((a) => a.id === fundFromCashId)
+        if (sourceAccount) {
+          const newBalance = sourceAccount.balance - parseFloat(tdPrincipal.replace(/,/g, '') || '0')
+          await fetch(`/api/wealth/cash/${fundFromCashId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ balance: Math.max(0, newBalance) }),
+          })
+        }
+      }
+
       router.push(`/portfolios/${portfolio.id}`)
     } catch {
       setError('Network error')
@@ -77,6 +112,10 @@ export default function NewPortfolioPage() {
       setLoading(false)
     }
   }
+
+  const principalAmount = parseFloat(tdPrincipal.replace(/,/g, '') || '0')
+  const selectedCashAccount = cashAccounts.find((a) => a.id === fundFromCashId)
+  const balanceAfterDeduction = selectedCashAccount ? selectedCashAccount.balance - principalAmount : null
 
   return (
     <div className="max-w-lg">
@@ -187,6 +226,36 @@ export default function NewPortfolioPage() {
                       (parseInt(tdTermMonths) / 12)
                     )}
                   </strong>
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Fund from cash account */}
+          {isTd && cashAccounts.length > 0 && (
+            <div className="rounded-xl bg-amber-50 border border-amber-100 p-4 space-y-3">
+              <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Funded From Cash Account</p>
+              <p className="text-xs text-amber-600">
+                Optionally deduct the principal from a cash account to avoid double-counting in your net worth.
+              </p>
+              <Select
+                label="Cash Account (optional)"
+                value={fundFromCashId}
+                onChange={(e) => setFundFromCashId(e.target.value)}
+                options={[
+                  { value: '', label: '— None —' },
+                  ...cashAccounts.map((a) => ({
+                    value: a.id,
+                    label: `${a.name}${a.institution ? ` (${a.institution})` : ''} — ${new Intl.NumberFormat('en-AU', { style: 'currency', currency: a.currency }).format(a.balance)}`,
+                  })),
+                ]}
+              />
+              {fundFromCashId && balanceAfterDeduction !== null && (
+                <p className={`text-xs font-medium ${balanceAfterDeduction < 0 ? 'text-red-600' : 'text-amber-700'}`}>
+                  {balanceAfterDeduction < 0
+                    ? `Warning: insufficient funds — account would go to ${new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(balanceAfterDeduction)}`
+                    : `Balance after deduction: ${new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(balanceAfterDeduction)}`
+                  }
                 </p>
               )}
             </div>

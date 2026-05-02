@@ -13,11 +13,14 @@ export default async function PropertiesPage() {
   const session = await auth()
   if (!session) redirect('/login')
 
-  const properties = await prisma.property.findMany({
+  const allProperties = await prisma.property.findMany({
     where: { userId: session.user.id },
     include: { mortgage: true },
     orderBy: { name: 'asc' },
   })
+
+  const properties = allProperties.filter((p) => !p.soldDate)
+  const soldProperties = allProperties.filter((p) => p.soldDate)
 
   const totalGross = properties.reduce(
     (sum, p) => sum + p.currentValue * (p.ownershipPct / 100),
@@ -74,9 +77,13 @@ export default async function PropertiesPage() {
       )}
 
       {/* Properties list */}
-      {properties.length === 0 ? (
+      {allProperties.length === 0 ? (
         <Card className="text-center py-10 text-gray-500 text-sm border-dashed">
           No properties yet. Add your first property below.
+        </Card>
+      ) : properties.length === 0 ? (
+        <Card className="text-center py-6 text-gray-400 text-sm border-dashed">
+          No active properties — see sold properties below.
         </Card>
       ) : (
         <div className="space-y-4">
@@ -145,6 +152,44 @@ export default async function PropertiesPage() {
               </Card>
             )
           })}
+        </div>
+      )}
+
+      {/* Sold properties */}
+      {soldProperties.length > 0 && (
+        <div>
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Sold Properties</h2>
+          <div className="space-y-3">
+            {soldProperties.map((p) => {
+              const gain = p.salePrice ? p.salePrice - (p.costBase ?? p.purchasePrice) : null
+              return (
+                <Card key={p.id} padding={false} className="overflow-hidden opacity-75">
+                  <div className="flex items-center justify-between px-6 py-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-gray-700">{p.name}</h3>
+                        <Badge variant="red">Sold {formatDate(p.soldDate)}</Badge>
+                        <Badge variant="gray">{p.type}</Badge>
+                      </div>
+                      {p.salePrice && (
+                        <p className="text-sm text-gray-500 mt-0.5">
+                          Sold for {formatCurrency(p.salePrice, p.currency)}
+                          {gain !== null && (
+                            <span className={`ml-2 ${gain >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                              {gain >= 0 ? '+' : ''}{formatCurrency(gain, p.currency)} gain
+                            </span>
+                          )}
+                        </p>
+                      )}
+                    </div>
+                    <Link href={`/wealth/properties/${p.id}`} className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">
+                      View →
+                    </Link>
+                  </div>
+                </Card>
+              )
+            })}
+          </div>
         </div>
       )}
 

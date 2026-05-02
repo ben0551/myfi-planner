@@ -39,12 +39,23 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const fyYear = parseInt(searchParams.get('fy') ?? String(currentFY()), 10)
 
-  const portfolios = await prisma.portfolio.findMany({
-    where: { userId },
-    include: {
-      transactions: { orderBy: { date: 'asc' } },
-    },
-  })
+  const fyStart = new Date(Date.UTC(fyYear - 1, 6, 1))
+  const fyEnd   = new Date(Date.UTC(fyYear, 5, 30, 23, 59, 59))
+
+  const [portfolios, soldProperties] = await Promise.all([
+    prisma.portfolio.findMany({
+      where: { userId },
+      include: { transactions: { orderBy: { date: 'asc' } } },
+    }),
+    prisma.property.findMany({
+      where: {
+        userId,
+        type: 'INVESTMENT',
+        soldDate: { gte: fyStart, lte: fyEnd },
+        salePrice: { not: null },
+      },
+    }),
+  ])
 
   const currency = portfolios[0]?.currency ?? 'AUD'
 
@@ -55,6 +66,17 @@ export async function GET(req: NextRequest) {
     const cgt = computeCGTReport(p.transactions, fyYear)
     realisedGrossGain += cgt.totalGrossGain
     realisedNetAssessable += cgt.netAssessableGain
+  }
+
+  // Add property CGT
+  for (const p of soldProperties) {
+    const salePrice = p.salePrice!
+    const costBase  = p.costBase ?? p.purchasePrice
+    const grossGain = salePrice - costBase
+    const heldDays  = Math.round((p.soldDate!.getTime() - p.purchaseDate.getTime()) / 86400000)
+    const eligible  = heldDays >= 365 && grossGain > 0
+    if (grossGain > 0) realisedGrossGain += grossGain
+    realisedNetAssessable += eligible ? grossGain * 0.5 : grossGain
   }
 
   // Collect all currently-held tickers across portfolios

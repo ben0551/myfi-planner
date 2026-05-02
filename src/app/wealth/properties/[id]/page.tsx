@@ -4,6 +4,7 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
 import { formatCurrency, formatDate } from '@/lib/formatters'
 import { PropertyForm } from '@/components/wealth/PropertyForm'
 import { MortgageForm } from '@/components/wealth/MortgageForm'
@@ -11,6 +12,7 @@ import { MortgageChart } from '@/components/wealth/MortgageChart'
 import { AssetValueChart } from '@/components/wealth/AssetValueChart'
 import { PropertyValueForm } from '@/components/wealth/PropertyValueForm'
 import { PropertyValuationHistory } from '@/components/wealth/PropertyValuationHistory'
+import { UnsellPropertyButton } from '@/components/wealth/UnsellPropertyButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -103,37 +105,81 @@ export default async function PropertyDetailPage({ params }: Props) {
           <span>/</span>
           <span>{property.name}</span>
         </div>
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-gray-900">{property.name}</h1>
-          <Badge variant="gray">{property.type}</Badge>
-          {property.ownershipPct < 100 && (
-            <Badge variant="blue">{property.ownershipPct}% owned</Badge>
-          )}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-gray-900">{property.name}</h1>
+            <Badge variant="gray">{property.type}</Badge>
+            {property.ownershipPct < 100 && (
+              <Badge variant="blue">{property.ownershipPct}% owned</Badge>
+            )}
+            {property.soldDate && (
+              <Badge variant="red">Sold {formatDate(property.soldDate)}</Badge>
+            )}
+          </div>
+          {property.soldDate
+            ? <UnsellPropertyButton propertyId={property.id} />
+            : (
+              <Link href={`/wealth/properties/${property.id}/sell`}>
+                <Button variant="danger" size="sm">Sell Property</Button>
+              </Link>
+            )
+          }
         </div>
         {property.address && (
           <p className="text-sm text-gray-500 mt-1">{property.address}</p>
         )}
       </div>
 
+      {/* Sale Details — shown only for sold properties */}
+      {property.soldDate && property.salePrice && (
+        <Card className="border-amber-200 bg-amber-50">
+          <h2 className="text-sm font-semibold text-amber-800 uppercase tracking-wide mb-3">Sale Details</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <StatCard label="Sale Price" value={formatCurrency(property.salePrice, property.currency)} />
+            <StatCard label="Sold Date" value={formatDate(property.soldDate)} />
+            {(() => {
+              const costBase = property.costBase ?? property.purchasePrice
+              const gain = property.salePrice - costBase
+              const gainPct = costBase > 0 ? (gain / costBase) * 100 : null
+              return (
+                <StatCard
+                  label="Capital Gain"
+                  value={`${gain >= 0 ? '+' : ''}${formatCurrency(gain, property.currency)}`}
+                  valueClass={gain >= 0 ? 'text-emerald-700' : 'text-red-600'}
+                  sub={gainPct != null ? `${gainPct >= 0 ? '+' : ''}${gainPct.toFixed(1)}% vs cost base` : undefined}
+                />
+              )
+            })()}
+            {property.costBase && (
+              <StatCard label="CGT Cost Base" value={formatCurrency(property.costBase, property.currency)} />
+            )}
+          </div>
+        </Card>
+      )}
+
       {/* Key Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <StatCard
-          label="Current Value"
-          value={formatCurrency(property.currentValue, property.currency)}
-        />
-        <StatCard
-          label="Net Equity"
-          value={formatCurrency(equity, property.currency)}
-          valueClass="text-emerald-700"
-        />
-        {property.mortgage && (
+        {!property.soldDate && (
+          <StatCard
+            label="Current Value"
+            value={formatCurrency(property.currentValue, property.currency)}
+          />
+        )}
+        {!property.soldDate && (
+          <StatCard
+            label="Net Equity"
+            value={formatCurrency(equity, property.currency)}
+            valueClass="text-emerald-700"
+          />
+        )}
+        {property.mortgage && !property.soldDate && (
           <StatCard
             label="Mortgage Balance"
             value={formatCurrency(property.mortgage.currentBalance, property.currency)}
             valueClass="text-red-600"
           />
         )}
-        {lvr !== null && (
+        {lvr !== null && !property.soldDate && (
           <StatCard
             label="LVR"
             value={`${lvr.toFixed(1)}%`}
@@ -146,7 +192,7 @@ export default async function PropertyDetailPage({ params }: Props) {
         />
         <StatCard label="Purchased" value={formatDate(property.purchaseDate)} />
         <StatCard label="Ownership" value={`${property.ownershipPct}%`} />
-        {capitalGain !== null && capitalGainPct !== null && (
+        {!property.soldDate && capitalGain !== null && capitalGainPct !== null && (
           <StatCard
             label="Capital Gain"
             value={`${capitalGain >= 0 ? '+' : ''}${formatCurrency(capitalGain, property.currency)}`}

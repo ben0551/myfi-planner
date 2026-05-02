@@ -31,10 +31,10 @@ export async function GET() {
   const session = await auth()
   if (!session) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // All dividend transactions across all of this user's portfolios
+  // All dividend + DRP transactions across all of this user's portfolios
   const dividends = await prisma.transaction.findMany({
     where: {
-      type: 'DIVIDEND',
+      type: { in: ['DIVIDEND', 'DRP'] },
       portfolio: { userId: session.user.id },
     },
     include: { portfolio: { select: { currency: true } } },
@@ -58,7 +58,12 @@ export async function GET() {
   for (const d of dividends) {
     const date = new Date(d.date)
     const key = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`
-    const amount = d.amount ? Number(d.amount) : 0
+    // DRP: use amount if set, otherwise qty × price
+    const amount = d.amount
+      ? Number(d.amount)
+      : d.type === 'DRP'
+        ? Number(d.quantity) * Number(d.price)
+        : 0
     actualMap.set(key, (actualMap.get(key) ?? 0) + amount)
   }
 
@@ -81,7 +86,7 @@ export async function GET() {
   for (const tx of allTransactions) {
     const t = tx.ticker.toUpperCase()
     const qty = Number(tx.quantity)
-    if (tx.type === 'BUY') holdingQty.set(t, (holdingQty.get(t) ?? 0) + qty)
+    if (tx.type === 'BUY' || tx.type === 'DRP') holdingQty.set(t, (holdingQty.get(t) ?? 0) + qty)
     else if (tx.type === 'SELL') holdingQty.set(t, Math.max(0, (holdingQty.get(t) ?? 0) - qty))
   }
   const heldTickers = new Set([...holdingQty.entries()].filter(([, q]) => q > 0.00001).map(([t]) => t))
@@ -92,7 +97,12 @@ export async function GET() {
     const ticker = d.ticker.toUpperCase()
     if (!heldTickers.has(ticker)) continue
     if (!tickerDivMap.has(ticker)) tickerDivMap.set(ticker, [])
-    tickerDivMap.get(ticker)!.push({ date, amount: d.amount ? Number(d.amount) : 0 })
+    const amount = d.amount
+      ? Number(d.amount)
+      : d.type === 'DRP'
+        ? Number(d.quantity) * Number(d.price)
+        : 0
+    tickerDivMap.get(ticker)!.push({ date, amount })
   }
 
   // Build projected month map: "YYYY-MM" → projected amount

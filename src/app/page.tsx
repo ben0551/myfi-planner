@@ -33,7 +33,7 @@ export default async function DashboardPage() {
       orderBy: { createdAt: 'asc' },
       include: { _count: { select: { transactions: true } } },
     }),
-    prisma.property.findMany({ where: { userId }, include: { mortgage: true } }),
+    prisma.property.findMany({ where: { userId, soldDate: null }, include: { mortgage: true } }),
     prisma.superAccount.findMany({ where: { userId } }),
     prisma.cashAccount.findMany({ where: { userId } }),
     prisma.fireSettings.findUnique({ where: { userId } }),
@@ -78,18 +78,20 @@ export default async function DashboardPage() {
   const snapshotMap = new Map(latestSnapshots.map((s) => [s.portfolioId, s]))
 
   // ── Wealth totals ──────────────────────────────────────────────────────────
-  const sharesValue = latestSnapshots.reduce((s, snap) => s + (snap?.value ?? 0), 0)
+  const portfolioTypeMap = new Map(portfolios.map((p) => [p.id, p.portfolioType]))
+  const sharesValue = latestSnapshots.reduce((s, snap) => portfolioTypeMap.get(snap.portfolioId) !== 'TERM_DEPOSIT' ? s + snap.value : s, 0)
+  const tdValue     = latestSnapshots.reduce((s, snap) => portfolioTypeMap.get(snap.portfolioId) === 'TERM_DEPOSIT'  ? s + snap.value : s, 0)
   const propertyGrossValue = properties.reduce((s, p) => s + p.currentValue * (p.ownershipPct / 100), 0)
   const totalMortgages = properties.reduce((s, p) => s + (p.mortgage?.currentBalance ?? 0), 0)
   const propertyEquity = propertyGrossValue - totalMortgages
   const superBalance = superAccounts.reduce((s, a) => s + a.currentBalance, 0)
   const cashBalance = cashAccounts.reduce((s, a) => s + a.balance, 0)
 
-  const totalAssets = sharesValue + propertyGrossValue + superBalance + cashBalance
+  const totalAssets = sharesValue + tdValue + propertyGrossValue + superBalance + cashBalance
   const totalLiabilities = totalMortgages
 
   const snap: WealthSnapshot = {
-    sharesValue, propertyEquity, superBalance, cashBalance,
+    sharesValue, tdValue, propertyEquity, superBalance, cashBalance,
     propertyDebt: totalMortgages, propertyGrossValue,
   }
   const settings = fireSettings ?? { includePropertyEquity: true, includeSuper: true, includeCash: true }
@@ -100,7 +102,7 @@ export default async function DashboardPage() {
 
   void recordNetWorthSnapshot(userId, {
     totalAssets, totalLiabilities, netWorth,
-    sharesValue, propertyValue: propertyGrossValue, superBalance, cashBalance,
+    sharesValue, tdValue, propertyValue: propertyGrossValue, superBalance, cashBalance,
   })
 
   // ── Goals progress ─────────────────────────────────────────────────────────

@@ -4,16 +4,19 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getCachedAsxQuotes } from '@/lib/asx/cache'
 import { computePortfolioPerformance } from '@/lib/calculations'
+import { computeCGTReport, currentFY, getFYLabel } from '@/lib/tax'
 import { HoldingsTable } from '@/components/portfolio/HoldingsTable'
 import { PerformanceSummary } from '@/components/portfolio/PerformanceSummary'
 import { AllocationChart } from '@/components/portfolio/AllocationChart'
 import { DividendsSection } from '@/components/portfolio/DividendsSection'
 import { PortfolioValueChart } from '@/components/portfolio/PortfolioValueChart'
+import { SyncDividendsButton } from '@/components/portfolio/SyncDividendsButton'
 import { recordSnapshot } from '@/lib/snapshots'
 import { calcTermDeposit } from '@/lib/termDeposit'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
+import { formatCurrency, formatDate, gainClass } from '@/lib/formatters'
 
 export const dynamic = 'force-dynamic'
 
@@ -162,10 +165,17 @@ export default async function PortfolioPage({
   }
 
   // ── Shares branch ──────────────────────────────────────────────────────────
-  const transactions = await prisma.transaction.findMany({
-    where: { portfolioId: id },
-    orderBy: { date: 'asc' },
-  })
+  const [transactions, pendingCount, tickerSettings] = await Promise.all([
+    prisma.transaction.findMany({
+      where: { portfolioId: id },
+      orderBy: { date: 'asc' },
+    }),
+    prisma.pendingTransaction.count({
+      where: { portfolioId: id, status: 'PENDING' },
+    }),
+    prisma.tickerSetting.findMany({ where: { portfolioId: id } }),
+  ])
+  const drpTickers = Object.fromEntries(tickerSettings.map((s) => [s.ticker, s.drpEnabled]))
 
   const tickers = [...new Set(transactions.map((t) => t.ticker.toUpperCase()))]
   const priceMap = await getCachedAsxQuotes(tickers)
@@ -179,6 +189,29 @@ export default async function PortfolioPage({
   )
 
   void recordSnapshot(portfolio.id, performance.currentMarketValue, performance.totalInvested)
+
+  // CGT events in the current FY — for "Sold This FY" section
+  const fy = currentFY()
+  const cgtReport = computeCGTReport(transactions, fy)
+  // Group by ticker so we can show a summary row per stock
+  const soldThisFY = Object.values(
+    cgtReport.events.reduce<Record<string, {
+      ticker: string; qtySold: number; proceeds: number; costBase: number;
+      realisedGain: number; assessableGain: number; hasDiscount: boolean; lastSellDate: Date
+    }>>((acc, e) => {
+      if (!acc[e.ticker]) {
+        acc[e.ticker] = { ticker: e.ticker, qtySold: 0, proceeds: 0, costBase: 0, realisedGain: 0, assessableGain: 0, hasDiscount: false, lastSellDate: e.sellDate }
+      }
+      acc[e.ticker].qtySold      += e.qty
+      acc[e.ticker].proceeds     += e.proceeds
+      acc[e.ticker].costBase     += e.costBase
+      acc[e.ticker].realisedGain += e.grossGain
+      acc[e.ticker].assessableGain += e.assessableGain
+      if (e.discountEligible) acc[e.ticker].hasDiscount = true
+      if (e.sellDate > acc[e.ticker].lastSellDate) acc[e.ticker].lastSellDate = e.sellDate
+      return acc
+    }, {})
+  ).sort((a, b) => b.lastSellDate.getTime() - a.lastSellDate.getTime())
 
   return (
     <div className="space-y-6">
@@ -218,11 +251,26 @@ export default async function PortfolioPage({
           <a href={`/api/portfolios/${id}/export`} download>
             <Button size="sm" variant="secondary">Export CSV</Button>
           </a>
+          {pendingCount > 0 && (
+            <Link href={`/portfolios/${id}/inbox`}>
+              <Button size="sm" variant="secondary">
+                Inbox <span className="ml-1 inline-flex items-center justify-center rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold w-5 h-5">{pendingCount}</span>
+              </Button>
+            </Link>
+          )}
           <Link href={`/portfolios/${id}/edit`}>
             <Button size="sm" variant="ghost">Edit</Button>
           </Link>
         </div>
       </div>
+
+      {/* Dividend sync */}
+      {transactions.length > 0 && (
+        <div className="flex items-center gap-2 -mt-2">
+          <span className="text-xs text-gray-400">Auto-sync dividends from Yahoo Finance:</span>
+          <SyncDividendsButton portfolioId={id} />
+        </div>
+      )}
 
       {transactions.length === 0 && (
         <Card>
@@ -249,9 +297,58 @@ export default async function PortfolioPage({
             <span className="text-sm text-gray-500">{performance.holdings.length} stocks</span>
           </div>
           <div className="p-6">
-            <HoldingsTable holdings={performance.holdings} currency={portfolio.currency} portfolioId={id} />
+            <HoldingsTable holdings={performance.holdings} currency={portfolio.currency} portfolioId={id} drpTickers={drpTickers} />
           </div>
         </Card>
+
+        {soldThisFY.length > 0 && (
+          <Card padding={false}>
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h2 className="font-semibold text-gray-900">Sold in {getFYLabel(fy)}</h2>
+                <p className="text-xs text-gray-400 mt-0.5">Disposals this financial year · average cost basis</p>
+              </div>
+              <Link href={`/portfolios/${id}/tax/cgt`}>
+                <Button size="sm" variant="secondary">Full CGT Report</Button>
+              </Link>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 text-left text-xs text-gray-500 uppercase tracking-wide">
+                    <th className="px-6 pb-3 pt-4 font-medium">Ticker</th>
+                    <th className="pb-3 pt-4 pr-6 font-medium text-right">Qty Sold</th>
+                    <th className="pb-3 pt-4 pr-6 font-medium text-right">Proceeds</th>
+                    <th className="pb-3 pt-4 pr-6 font-medium text-right">Cost Base</th>
+                    <th className="pb-3 pt-4 pr-6 font-medium text-right">Gross Gain</th>
+                    <th className="pb-3 pt-4 pr-6 font-medium text-right">Assessable</th>
+                    <th className="pb-3 pt-4 pr-6 font-medium">Last Sale</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {soldThisFY.map((s) => (
+                    <tr key={s.ticker} className="hover:bg-gray-50">
+                      <td className="py-3 px-6 font-semibold text-gray-900">{s.ticker}</td>
+                      <td className="py-3 pr-6 text-right text-gray-700">{s.qtySold.toLocaleString(undefined, { maximumFractionDigits: 4 })}</td>
+                      <td className="py-3 pr-6 text-right text-gray-700">{formatCurrency(s.proceeds, portfolio.currency)}</td>
+                      <td className="py-3 pr-6 text-right text-gray-700">{formatCurrency(s.costBase, portfolio.currency)}</td>
+                      <td className={`py-3 pr-6 text-right font-medium ${gainClass(s.realisedGain)}`}>
+                        {formatCurrency(s.realisedGain, portfolio.currency)}
+                      </td>
+                      <td className={`py-3 pr-6 text-right font-medium ${gainClass(s.assessableGain)}`}>
+                        {formatCurrency(s.assessableGain, portfolio.currency)}
+                        {s.hasDiscount && (
+                          <span className="ml-1.5 inline-block rounded bg-green-100 px-1 py-0.5 text-xs text-green-700 font-normal">50%</span>
+                        )}
+                      </td>
+                      <td className="py-3 pr-6 text-gray-500">{formatDate(s.lastSellDate, 'short')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
         <Card>
           <h2 className="font-semibold text-gray-900 mb-4">Portfolio Value</h2>
           <PortfolioValueChart portfolioId={id} currency={portfolio.currency} />

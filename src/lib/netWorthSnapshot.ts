@@ -7,6 +7,7 @@ export async function recordNetWorthSnapshot(
     totalLiabilities: number
     netWorth: number
     sharesValue: number
+    tdValue: number
     propertyValue: number
     superBalance: number
     cashBalance: number

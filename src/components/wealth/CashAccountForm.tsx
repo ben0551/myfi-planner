@@ -10,6 +10,7 @@ interface CashValues {
   name: string
   institution: string
   balance: string
+  openingDate: string
   currency: string
   notes: string
 }
@@ -27,10 +28,15 @@ const CURRENCIES = [
   { value: 'EUR', label: 'EUR' },
 ]
 
+function todayStr() {
+  return new Date().toISOString().slice(0, 10)
+}
+
 const defaults: CashValues = {
   name: '',
   institution: '',
   balance: '',
+  openingDate: todayStr(),
   currency: 'AUD',
   notes: '',
 }
@@ -58,6 +64,7 @@ export function CashAccountForm({ accountId, initialValues }: Props) {
       balance: parseFloat(values.balance),
       currency: values.currency,
       notes: values.notes || null,
+      ...(!isEdit ? { openingDate: values.openingDate } : {}),
     }
 
     try {
@@ -112,7 +119,7 @@ export function CashAccountForm({ accountId, initialValues }: Props) {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Input
-          label="Balance"
+          label={isEdit ? 'Balance' : 'Opening Balance'}
           type="number"
           min="0"
           step="0.01"
@@ -121,13 +128,31 @@ export function CashAccountForm({ accountId, initialValues }: Props) {
           value={values.balance}
           onChange={(e) => set('balance', e.target.value)}
         />
+        {!isEdit ? (
+          <Input
+            label="Opening Date"
+            type="date"
+            required
+            value={values.openingDate}
+            onChange={(e) => set('openingDate', e.target.value)}
+          />
+        ) : (
+          <Select
+            label="Currency"
+            options={CURRENCIES}
+            value={values.currency}
+            onChange={(e) => set('currency', e.target.value)}
+          />
+        )}
+      </div>
+      {!isEdit && (
         <Select
           label="Currency"
           options={CURRENCIES}
           value={values.currency}
           onChange={(e) => set('currency', e.target.value)}
         />
-      </div>
+      )}
 
       <Input
         label="Notes (optional)"

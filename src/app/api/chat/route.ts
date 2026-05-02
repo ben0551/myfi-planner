@@ -12,7 +12,7 @@ async function buildContext(userId: string): Promise<string> {
       where: { userId },
       include: { transactions: { orderBy: { date: 'asc' } } },
     }),
-    prisma.property.findMany({ where: { userId }, include: { mortgage: true } }),
+    prisma.property.findMany({ where: { userId, soldDate: null }, include: { mortgage: true } }),
     prisma.superAccount.findMany({ where: { userId } }),
     prisma.cashAccount.findMany({ where: { userId } }),
     prisma.fireSettings.findUnique({ where: { userId } }),
@@ -75,7 +75,7 @@ ${perf.holdings.map((h) =>
     portfolios.map((p) => prisma.portfolioSnapshot.findFirst({ where: { portfolioId: p.id }, orderBy: { date: 'desc' } }))
   )
   const sharesValue = latestSnapshots.reduce((s, snap) => s + (snap?.value ?? 0), 0)
-  const nwSnap = { sharesValue, propertyEquity, superBalance, cashBalance, propertyDebt: 0, propertyGrossValue: 0 }
+  const nwSnap = { sharesValue, tdValue: 0, propertyEquity, superBalance, cashBalance, propertyDebt: 0, propertyGrossValue: 0 }
   const settings = fireSettings ?? { includePropertyEquity: true, includeSuper: true, includeCash: true }
   const netWorth = computeNetWorth(nwSnap, settings)
 

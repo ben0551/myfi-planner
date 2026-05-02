@@ -4,7 +4,8 @@
  */
 
 export interface WealthSnapshot {
-  sharesValue: number          // sum of portfolio market values
+  sharesValue: number          // sum of share portfolio market values
+  tdValue: number              // sum of term deposit portfolio values
   propertyEquity: number       // Σ (currentValue × ownershipPct% − mortgageBalance)
   superBalance: number         // Σ super account balances
   cashBalance: number          // Σ cash account balances
@@ -16,7 +17,7 @@ export function computeNetWorth(
   snap: WealthSnapshot,
   settings: { includePropertyEquity: boolean; includeSuper: boolean; includeCash: boolean }
 ): number {
-  let nw = snap.sharesValue
+  let nw = snap.sharesValue + snap.tdValue
   if (settings.includePropertyEquity) nw += snap.propertyEquity
   if (settings.includeSuper) nw += snap.superBalance
   if (settings.includeCash) nw += snap.cashBalance

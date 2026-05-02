@@ -27,9 +27,10 @@ interface TransactionFormProps {
 }
 
 const typeOptions = [
-  { value: 'BUY', label: 'Buy' },
-  { value: 'SELL', label: 'Sell' },
+  { value: 'BUY',      label: 'Buy' },
+  { value: 'SELL',     label: 'Sell' },
   { value: 'DIVIDEND', label: 'Dividend' },
+  { value: 'DRP',      label: 'DRP (Dividend Reinvestment)' },
 ]
 
 export function TransactionForm({
@@ -59,11 +60,15 @@ export function TransactionForm({
     e.preventDefault()
     setError('')
 
+    const isDividendLike = type === 'DIVIDEND'
+    const isDrp = type === 'DRP'
+    const needsQtyPrice = !isDividendLike  // BUY, SELL, DRP all need qty+price
+
     if (!ticker.trim()) { setError('Ticker is required'); return }
     if (!date) { setError('Date is required'); return }
-    if (type !== 'DIVIDEND' && !quantity) { setError('Quantity is required'); return }
-    if (type !== 'DIVIDEND' && !price) { setError('Price is required'); return }
-    if (type === 'DIVIDEND' && !amount) { setError('Dividend amount is required'); return }
+    if (needsQtyPrice && !quantity) { setError('Quantity is required'); return }
+    if (needsQtyPrice && !price) { setError('Price is required'); return }
+    if (isDividendLike && !amount) { setError('Dividend amount is required'); return }
 
     setLoading(true)
     try {
@@ -78,11 +83,11 @@ export function TransactionForm({
           type,
           ticker: ticker.toUpperCase(),
           date,
-          quantity: type === 'DIVIDEND' ? 0 : parseFloat(quantity),
-          price: type === 'DIVIDEND' ? 0 : parseFloat(price),
+          quantity: isDividendLike ? 0 : parseFloat(quantity),
+          price: isDividendLike ? 0 : parseFloat(price),
           fees: fees ? parseFloat(fees) : 0,
-          amount: type === 'DIVIDEND' ? parseFloat(amount) : undefined,
-          frankingPct: type === 'DIVIDEND' ? parseFloat(frankingPct) || 0 : 0,
+          amount: (isDividendLike || isDrp) ? (amount ? parseFloat(amount) : undefined) : undefined,
+          frankingPct: (isDividendLike || isDrp) ? parseFloat(frankingPct) || 0 : 0,
           notes: notes || undefined,
         }),
       })
@@ -132,25 +137,7 @@ export function TransactionForm({
         onChange={(e) => setDate(e.target.value)}
       />
 
-      {type !== 'DIVIDEND' ? (
-        <div className="grid grid-cols-2 gap-4">
-          <Input
-            label="Quantity (shares)"
-            type="number"
-            step="any"
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-            placeholder="e.g. 100"
-          />
-          <LabelledCurrencyInput
-            label="Price per share ($)"
-            decimalScale={4}
-            value={price}
-            onChange={(v) => setPrice(v)}
-            placeholder="45.50"
-          />
-        </div>
-      ) : (
+      {type === 'DIVIDEND' ? (
         <div className="space-y-4">
           <LabelledCurrencyInput
             label="Dividend Amount ($)"
@@ -170,14 +157,74 @@ export function TransactionForm({
             hint="0 = unfranked, 100 = fully franked"
           />
         </div>
+      ) : type === 'DRP' ? (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Shares received"
+              type="number"
+              step="any"
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              placeholder="e.g. 12.345"
+            />
+            <LabelledCurrencyInput
+              label="DRP price per share ($)"
+              decimalScale={4}
+              value={price}
+              onChange={(v) => setPrice(v)}
+              placeholder="e.g. 4.50"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <LabelledCurrencyInput
+              label="Dividend value ($, optional)"
+              value={amount}
+              onChange={(v) => setAmount(v)}
+              placeholder={quantity && price ? String(parseFloat(quantity || '0') * parseFloat(price.replace(/,/g, '') || '0')) : '0'}
+              hint="Defaults to shares × price"
+            />
+            <Input
+              label="Franking % (0–100)"
+              type="number"
+              min="0"
+              max="100"
+              step="any"
+              value={frankingPct}
+              onChange={(e) => setFrankingPct(e.target.value)}
+              placeholder="0"
+              hint="0 = unfranked, 100 = fully franked"
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-4">
+          <Input
+            label="Quantity (shares)"
+            type="number"
+            step="any"
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+            placeholder="e.g. 100"
+          />
+          <LabelledCurrencyInput
+            label="Price per share ($)"
+            decimalScale={4}
+            value={price}
+            onChange={(v) => setPrice(v)}
+            placeholder="45.50"
+          />
+        </div>
       )}
 
-      <LabelledCurrencyInput
-        label="Brokerage / Fees ($)"
-        value={fees}
-        onChange={(v) => setFees(v)}
-        placeholder="0"
-      />
+      {type !== 'DIVIDEND' && type !== 'DRP' && (
+        <LabelledCurrencyInput
+          label="Brokerage / Fees ($)"
+          value={fees}
+          onChange={(v) => setFees(v)}
+          placeholder="0"
+        />
+      )}
 
       <Input
         label="Notes (optional)"

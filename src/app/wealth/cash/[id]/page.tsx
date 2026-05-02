@@ -7,6 +7,7 @@ import { formatCurrency, formatDate } from '@/lib/formatters'
 import { CashAccountForm } from '@/components/wealth/CashAccountForm'
 import { SuperBalanceChart } from '@/components/wealth/SuperBalanceChart'
 import { SuperReconcileForm } from '@/components/wealth/SuperReconcileForm'
+import { CashBalanceHistoryTable } from '@/components/wealth/CashBalanceHistoryTable'
 
 export const dynamic = 'force-dynamic'
 
@@ -109,37 +110,11 @@ export default async function CashDetailPage({ params }: Props) {
       {account.balanceHistory.length > 0 && (
         <Card>
           <h2 className="text-sm font-semibold text-gray-700 mb-3">Recorded Balances</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="text-left py-2 text-xs font-medium text-gray-500 uppercase">Date</th>
-                  <th className="text-right py-2 text-xs font-medium text-gray-500 uppercase">Balance</th>
-                  <th className="text-right py-2 text-xs font-medium text-gray-500 uppercase">Change</th>
-                </tr>
-              </thead>
-              <tbody>
-                {account.balanceHistory.map((entry, i) => {
-                  const prev = account.balanceHistory[i + 1]
-                  const change = prev ? entry.balance - prev.balance : null
-                  return (
-                    <tr key={entry.id} className="border-b border-gray-50">
-                      <td className="py-2 text-gray-700">{formatDate(entry.date)}</td>
-                      <td className="py-2 text-right font-medium text-gray-900">
-                        {formatCurrency(entry.balance, account.currency)}
-                      </td>
-                      <td className={`py-2 text-right text-xs ${
-                        change === null ? 'text-gray-400' :
-                        change >= 0 ? 'text-emerald-600' : 'text-red-500'
-                      }`}>
-                        {change === null ? '—' : `${change >= 0 ? '+' : ''}${formatCurrency(change, account.currency)}`}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          <CashBalanceHistoryTable
+            accountId={account.id}
+            history={account.balanceHistory}
+            currency={account.currency}
+          />
         </Card>
       )}
 

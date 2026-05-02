@@ -11,7 +11,7 @@ export async function PATCH(
 
   const { id } = await params
   const body = await request.json()
-  const { action, portfolioId, overrides } = body
+  const { action, portfolioId, cashAccountId, overrides } = body
 
   const pending = await prisma.pendingTransaction.findUnique({ where: { id } })
   if (!pending) return Response.json({ error: 'Not found' }, { status: 404 })
@@ -39,10 +39,17 @@ export async function PATCH(
     const type = (overrides?.transactionType ?? pending.transactionType) as string
     const ticker = (overrides?.ticker ?? pending.ticker) as string
     const date = overrides?.tradeDate ?? pending.tradeDate
-    const quantity = overrides?.quantity ?? pending.quantity ?? 0
-    const price = overrides?.price ?? pending.price ?? 0
-    const fees = overrides?.fees ?? pending.fees ?? 0
-    const amount = type === 'DIVIDEND' ? price : null
+    const quantity = Number(overrides?.quantity ?? pending.quantity ?? 0)
+    const price = Number(overrides?.price ?? pending.price ?? 0)
+    const fees = Number(overrides?.fees ?? pending.fees ?? 0)
+    // For DIVIDEND: amount = total income = shares held × per-share amount
+    const totalAmount = type === 'DIVIDEND' ? quantity * price : null
+
+    // Franking: prefer explicit override, fall back to parseWarnings
+    const frankingFromWarnings = pending.parseWarnings?.match(/Franking:\s*(\d+)/)
+    const frankingPct = overrides?.frankingPct != null
+      ? Number(overrides.frankingPct)
+      : frankingFromWarnings ? parseInt(frankingFromWarnings[1], 10) : 0
 
     if (!type || !ticker || !date) {
       return Response.json(
@@ -51,28 +58,52 @@ export async function PATCH(
       )
     }
 
-    const tx = await prisma.transaction.create({
-      data: {
-        portfolioId: pid,
-        type: type.toUpperCase() as 'BUY' | 'SELL' | 'DIVIDEND',
-        ticker: ticker.toUpperCase(),
-        date: new Date(date),
-        quantity,
-        price: type === 'DIVIDEND' ? 0 : price,
-        fees,
-        amount: type === 'DIVIDEND' ? amount : null,
-        notes: overrides?.notes ?? null,
-      },
-    })
+    const txDate = new Date(date)
 
-    await prisma.pendingTransaction.update({
-      where: { id },
-      data: {
-        status: 'CONFIRMED',
-        confirmedAt: new Date(),
-        portfolioId: pid,
-        transactionId: tx.id,
-      },
+    const tx = await prisma.$transaction(async (db) => {
+      const created = await db.transaction.create({
+        data: {
+          portfolioId: pid,
+          type: type.toUpperCase() as 'BUY' | 'SELL' | 'DIVIDEND' | 'DRP',
+          ticker: ticker.toUpperCase(),
+          date: txDate,
+          quantity,
+          price: type === 'DIVIDEND' ? 0 : price,
+          fees,
+          amount: totalAmount,
+          frankingPct,
+          notes: overrides?.notes ?? null,
+        },
+      })
+
+      // Optionally credit dividend proceeds to a cash account
+      if (cashAccountId && totalAmount && totalAmount > 0) {
+        const account = await db.cashAccount.findUnique({ where: { id: cashAccountId } })
+        if (account && (isAdmin || account.userId === session.user.id)) {
+          const newBalance = account.balance + totalAmount
+          await db.cashAccount.update({
+            where: { id: cashAccountId },
+            data: { balance: newBalance, balanceUpdatedAt: txDate },
+          })
+          await db.cashBalanceHistory.upsert({
+            where: { accountId_date: { accountId: cashAccountId, date: txDate } },
+            update: { balance: newBalance },
+            create: { accountId: cashAccountId, balance: newBalance, date: txDate },
+          })
+        }
+      }
+
+      await db.pendingTransaction.update({
+        where: { id },
+        data: {
+          status: 'CONFIRMED',
+          confirmedAt: new Date(),
+          portfolioId: pid,
+          transactionId: created.id,
+        },
+      })
+
+      return created
     })
 
     return Response.json({ status: 'confirmed', transaction: tx })

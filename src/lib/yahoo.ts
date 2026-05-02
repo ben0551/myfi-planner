@@ -502,6 +502,52 @@ export async function getYfAllData(ticker: string): Promise<YfAllData | null> {
   }
 }
 
+// ── Dividend history ─────────────────────────────────────────────────────────
+
+export interface YfDividendEvent {
+  exDate: Date
+  amountPerShare: number
+}
+
+/**
+ * Fetch historical dividend events from Yahoo Finance chart API.
+ * Uses the same v8 chart endpoint as price history but requests events=dividends.
+ * Returns ex-dividend dates and cash amount per share (pre-tax, no franking).
+ */
+export async function fetchYahooDividendHistory(
+  ticker: string,
+  years = 3
+): Promise<YfDividendEvent[]> {
+  const symbol = toSymbol(ticker)
+  const range = `${years}y`
+  const url = `${YF_BASE}/${symbol}?interval=1mo&range=${range}&events=dividends`
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        Accept: 'application/json',
+      },
+      next: { revalidate: 0 },
+    })
+    if (!res.ok) return []
+    const data = await res.json()
+    const result = data?.chart?.result?.[0]
+    if (!result) return []
+
+    // events.dividends is a map of Unix-timestamp-string → { amount, date }
+    const rawDivs = result.events?.dividends as Record<string, { amount: number; date: number }> | undefined
+    if (!rawDivs) return []
+
+    return Object.values(rawDivs)
+      .map((d) => ({ exDate: new Date(d.date * 1000), amountPerShare: d.amount }))
+      .sort((a, b) => a.exDate.getTime() - b.exDate.getTime())
+  } catch (err) {
+    console.error(`[yahoo] fetchYahooDividendHistory ${ticker}:`, err)
+    return []
+  }
+}
+
 export async function getYfFundamentals(ticker: string): Promise<YfFundamentals | null> {
   try {
     const auth = await getYahooCrumb()

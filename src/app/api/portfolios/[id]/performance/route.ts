@@ -4,6 +4,7 @@ import { auth } from '@/lib/auth'
 import { getCachedAsxQuotes } from '@/lib/asx/cache'
 import { computePortfolioPerformance } from '@/lib/calculations'
 import { checkAlerts } from '@/lib/alerts/checker'
+import { calcTermDeposit } from '@/lib/termDeposit'
 
 export async function GET(
   _req: NextRequest,
@@ -18,6 +19,20 @@ export async function GET(
     where: { id, userId: session.user.id },
   })
   if (!portfolio) return Response.json({ error: 'Not found' }, { status: 404 })
+
+  if (portfolio.portfolioType === 'TERM_DEPOSIT') {
+    const { tdPrincipal, tdRate, tdStartDate, tdMaturityDate } = portfolio
+    if (!tdPrincipal || !tdRate || !tdStartDate || !tdMaturityDate) {
+      return Response.json({ currentMarketValue: 0, totalReturn: 0, totalReturnPct: 0, holdings: [] })
+    }
+    const td = calcTermDeposit(tdPrincipal, tdRate, tdStartDate, tdMaturityDate)
+    return Response.json({
+      currentMarketValue: td.currentValue,
+      totalReturn: td.accruedInterest,
+      totalReturnPct: tdPrincipal > 0 ? (td.accruedInterest / tdPrincipal) * 100 : 0,
+      holdings: [],
+    })
+  }
 
   const transactions = await prisma.transaction.findMany({
     where: { portfolioId: id },

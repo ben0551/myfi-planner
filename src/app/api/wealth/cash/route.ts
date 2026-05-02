@@ -18,7 +18,10 @@ export async function POST(request: NextRequest) {
   if (!session) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()
-  const { name, institution, balance, currency, notes } = body
+  const { name, institution, balance, currency, notes, openingDate } = body
+
+  const firstDate = openingDate ? new Date(openingDate) : new Date()
+  firstDate.setHours(0, 0, 0, 0)
 
   const account = await prisma.cashAccount.create({
     data: {
@@ -28,15 +31,14 @@ export async function POST(request: NextRequest) {
       balance,
       currency,
       notes,
+      balanceUpdatedAt: firstDate,
     },
   })
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
   await prisma.cashBalanceHistory.upsert({
-    where: { accountId_date: { accountId: account.id, date: today } },
+    where: { accountId_date: { accountId: account.id, date: firstDate } },
     update: { balance },
-    create: { accountId: account.id, date: today, balance },
+    create: { accountId: account.id, date: firstDate, balance },
   })
 
   return Response.json(account, { status: 201 })

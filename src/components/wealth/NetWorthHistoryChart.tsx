@@ -13,6 +13,7 @@ interface Snapshot {
   totalAssets: number
   totalLiabilities: number
   sharesValue: number
+  tdValue: number
   propertyValue: number
   superBalance: number
   cashBalance: number
@@ -29,10 +30,11 @@ const RANGES: { key: Range; label: string; days: number }[] = [
 ]
 
 const ASSET_SERIES = [
-  { key: 'cashBalance',   name: 'Cash',     color: '#10b981' },
-  { key: 'superBalance',  name: 'Super',    color: '#3b82f6' },
-  { key: 'propertyValue', name: 'Property', color: '#f59e0b' },
-  { key: 'sharesValue',   name: 'Shares',   color: '#6366f1' },
+  { key: 'cashBalance',   name: 'Cash',          color: '#10b981' },
+  { key: 'tdValue',       name: 'Term Deposits', color: '#0ea5e9' },
+  { key: 'superBalance',  name: 'Super',         color: '#3b82f6' },
+  { key: 'propertyValue', name: 'Property',      color: '#f59e0b' },
+  { key: 'sharesValue',   name: 'Shares',        color: '#6366f1' },
 ] as const
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
@@ -137,6 +139,12 @@ export function NetWorthHistoryChart() {
 
   const current = useMemo(() => filteredData[filteredData.length - 1] ?? null, [filteredData])
 
+  const activeSeries = useMemo(() =>
+    ASSET_SERIES.filter((s) =>
+      filteredData.some((d) => (d[s.key as keyof Snapshot] as number) > 0)
+    ),
+  [filteredData])
+
   if (error) return null
   if (!data) return <div className="h-48 flex items-center justify-center text-gray-400 text-sm">Loading…</div>
   if (data.length === 0) {
@@ -222,7 +230,7 @@ export function NetWorthHistoryChart() {
         <ResponsiveContainer width="100%" height={220}>
           <ComposedChart data={filteredData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
             <defs>
-              {ASSET_SERIES.map((s) => (
+              {activeSeries.map((s) => (
                 <linearGradient key={s.key} id={`grad-${s.key}`} x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%"  stopColor={s.color} stopOpacity={0.7} />
                   <stop offset="95%" stopColor={s.color} stopOpacity={0.4} />
@@ -234,7 +242,7 @@ export function NetWorthHistoryChart() {
             <YAxis tickFormatter={fmt} tick={{ fontSize: 11, fill: '#9ca3af' }} width={72} />
             <Tooltip content={(p: unknown) => <CustomTooltip {...(p as TEntry)} view="breakdown" />} />
             <ReferenceLine y={0} stroke="#e5e7eb" />
-            {ASSET_SERIES.map((s) => (
+            {activeSeries.map((s) => (
               <Area
                 key={s.key}
                 type="monotone"
@@ -256,7 +264,7 @@ export function NetWorthHistoryChart() {
       {/* Breakdown legend with current values */}
       {view === 'breakdown' && current && (
         <div className="flex flex-wrap gap-x-5 gap-y-1.5 pt-1">
-          {ASSET_SERIES.slice().reverse().map((s) => {
+          {activeSeries.slice().reverse().map((s) => {
             const val = current[s.key as keyof Snapshot] as number
             if (!val) return null
             return (

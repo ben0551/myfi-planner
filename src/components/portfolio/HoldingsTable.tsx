@@ -9,6 +9,7 @@ interface HoldingsTableProps {
   holdings: Holding[]
   currency: string
   portfolioId: string
+  drpTickers?: Record<string, boolean>
 }
 
 type SortKey =
@@ -26,8 +27,22 @@ interface SortState {
   dir: 'asc' | 'desc'
 }
 
-export function HoldingsTable({ holdings, currency, portfolioId: _portfolioId }: HoldingsTableProps) {
+export function HoldingsTable({ holdings, currency, portfolioId, drpTickers = {} }: HoldingsTableProps) {
   const [sort, setSort] = useState<SortState>({ key: 'currentValue', dir: 'desc' })
+  const [drpState, setDrpState] = useState<Record<string, boolean>>(drpTickers)
+  const [saving, setSaving] = useState<string | null>(null)
+
+  async function toggleDrp(ticker: string) {
+    const next = !drpState[ticker]
+    setDrpState((s) => ({ ...s, [ticker]: next }))
+    setSaving(ticker)
+    await fetch(`/api/portfolios/${portfolioId}/ticker-settings`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ticker, drpEnabled: next }),
+    })
+    setSaving(null)
+  }
 
   if (holdings.length === 0) {
     return (
@@ -107,6 +122,7 @@ export function HoldingsTable({ holdings, currency, portfolioId: _portfolioId }:
             <Th col="unrealisedGain" label="Unrealised Gain" right />
             <Th col="unrealisedGainPct" label="Return %" right />
             <Th col="weight" label="Weight" right />
+            <th className="pb-3 pr-4 font-medium text-right">DRP</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
@@ -146,6 +162,20 @@ export function HoldingsTable({ holdings, currency, portfolioId: _portfolioId }:
               </td>
               <td className="py-3 text-right text-gray-500">
                 {h.weight !== null ? `${h.weight.toFixed(1)}%` : '—'}
+              </td>
+              <td className="py-3 pr-4 text-right">
+                <button
+                  onClick={() => toggleDrp(h.ticker)}
+                  disabled={saving === h.ticker}
+                  title={drpState[h.ticker] ? 'DRP enabled — click to disable' : 'DRP disabled — click to enable'}
+                  className={`text-xs px-2 py-0.5 rounded-full font-medium transition-colors ${
+                    drpState[h.ticker]
+                      ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                      : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                  } ${saving === h.ticker ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                >
+                  {drpState[h.ticker] ? 'DRP' : 'Cash'}
+                </button>
               </td>
             </tr>
           ))}

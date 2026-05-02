@@ -20,17 +20,31 @@ export default async function TaxSummaryPage({
 
   const { fy } = await searchParams
 
-  const portfolios = await prisma.portfolio.findMany({
-    where: { userId: session.user.id },
-    include: { transactions: { orderBy: { date: 'asc' } } },
-    orderBy: { createdAt: 'asc' },
-  })
+  const fyYear = fy ? parseInt(fy, 10) : currentFY()
+  const fyLabel = getFYLabel(fyYear)
+
+  const fyStart = new Date(Date.UTC(fyYear - 1, 6, 1))
+  const fyEnd   = new Date(Date.UTC(fyYear, 5, 30, 23, 59, 59))
+
+  const [portfolios, soldProperties] = await Promise.all([
+    prisma.portfolio.findMany({
+      where: { userId: session.user.id },
+      include: { transactions: { orderBy: { date: 'asc' } } },
+      orderBy: { createdAt: 'asc' },
+    }),
+    prisma.property.findMany({
+      where: {
+        userId: session.user.id,
+        type: 'INVESTMENT',
+        soldDate: { gte: fyStart, lte: fyEnd },
+        salePrice: { not: null },
+      },
+    }),
+  ])
 
   // Collect all transactions across all portfolios to determine available FYs
   const allTransactions = portfolios.flatMap((p) => p.transactions)
   const allFYs = availableFYs(allTransactions)
-  const fyYear = fy ? parseInt(fy, 10) : currentFY()
-  const fyLabel = getFYLabel(fyYear)
 
   // Compute per-portfolio and aggregate
   const perPortfolio = portfolios
@@ -43,14 +57,28 @@ export default async function TaxSummaryPage({
 
   const currency = portfolios[0]?.currency ?? 'AUD'
 
+  // Property CGT for this FY
+  const propertyEvents = soldProperties.map((p) => {
+    const salePrice  = p.salePrice!
+    const costBase   = p.costBase ?? p.purchasePrice
+    const grossGain  = salePrice - costBase
+    const heldDays   = Math.round((p.soldDate!.getTime() - p.purchaseDate.getTime()) / 86400000)
+    const eligible   = heldDays >= 365 && grossGain > 0
+    return { grossGain, discountApplied: eligible ? grossGain * 0.5 : 0, assessable: eligible ? grossGain * 0.5 : grossGain }
+  })
+  const propGrossGain       = propertyEvents.reduce((s, e) => s + (e.grossGain > 0 ? e.grossGain : 0), 0)
+  const propCapitalLosses   = propertyEvents.reduce((s, e) => s + (e.grossGain < 0 ? Math.abs(e.grossGain) : 0), 0)
+  const propDiscountApplied = propertyEvents.reduce((s, e) => s + e.discountApplied, 0)
+  const propNetAssessable   = propertyEvents.reduce((s, e) => s + e.assessable, 0)
+
   const agg = {
-    grossGain: perPortfolio.reduce((s, r) => s + r.cgt.totalGrossGain, 0),
-    discountApplied: perPortfolio.reduce((s, r) => s + r.cgt.totalDiscountApplied, 0),
-    capitalLosses: perPortfolio.reduce((s, r) => s + r.cgt.totalCapitalLosses, 0),
-    netAssessableGain: perPortfolio.reduce((s, r) => s + r.cgt.netAssessableGain, 0),
-    cashDividends: perPortfolio.reduce((s, r) => s + r.div.totalCash, 0),
-    frankingCredits: perPortfolio.reduce((s, r) => s + r.div.totalFrankingCredits, 0),
-    grossedUp: perPortfolio.reduce((s, r) => s + r.div.totalGrossedUp, 0),
+    grossGain:        perPortfolio.reduce((s, r) => s + r.cgt.totalGrossGain, 0) + propGrossGain,
+    discountApplied:  perPortfolio.reduce((s, r) => s + r.cgt.totalDiscountApplied, 0) + propDiscountApplied,
+    capitalLosses:    perPortfolio.reduce((s, r) => s + r.cgt.totalCapitalLosses, 0) + propCapitalLosses,
+    netAssessableGain: perPortfolio.reduce((s, r) => s + r.cgt.netAssessableGain, 0) + propNetAssessable,
+    cashDividends:    perPortfolio.reduce((s, r) => s + r.div.totalCash, 0),
+    frankingCredits:  perPortfolio.reduce((s, r) => s + r.div.totalFrankingCredits, 0),
+    grossedUp:        perPortfolio.reduce((s, r) => s + r.div.totalGrossedUp, 0),
   }
   const totalAssessable = agg.netAssessableGain + agg.grossedUp
 

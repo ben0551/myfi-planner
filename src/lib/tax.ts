@@ -147,8 +147,8 @@ export function computeCGTReport(
     const fees = new Decimal(tx.fees.toString())
     const txDate = new Date(tx.date)
 
-    if (tx.type === 'BUY') {
-      const cost = qty.times(price).plus(fees)
+    if (tx.type === 'BUY' || tx.type === 'DRP') {
+      const cost = tx.type === 'BUY' ? qty.times(price).plus(fees) : qty.times(price)
       const newQty = s.quantity.plus(qty)
       s.totalCostBasis = s.totalCostBasis.plus(cost)
       s.avgCost = newQty.gt(0) ? s.totalCostBasis.dividedBy(newQty) : new Decimal(0)
@@ -224,13 +224,18 @@ export function computeDividendReport(
   const { start, end } = getFYBounds(fyYear)
 
   const dividends = transactions.filter((tx) => {
-    if (tx.type !== 'DIVIDEND') return false
+    if (tx.type !== 'DIVIDEND' && tx.type !== 'DRP') return false
     const d = new Date(tx.date)
     return d >= start && d <= end
   })
 
   const events: DividendEvent[] = dividends.map((tx) => {
-    const cashDiv = new Decimal(tx.amount?.toString() ?? '0')
+    // For DRP, the income is the reinvestment amount (tx.amount if set, otherwise qty * price)
+    const cashDiv = tx.type === 'DRP'
+      ? (tx.amount
+          ? new Decimal(tx.amount.toString())
+          : new Decimal(tx.quantity.toString()).times(new Decimal(tx.price.toString())))
+      : new Decimal(tx.amount?.toString() ?? '0')
     const frankingPct = tx.frankingPct ?? 0
     // frankingCredit = cashDiv / (1 - TAX_RATE) * TAX_RATE * (frankingPct / 100)
     const frankingCredit = cashDiv

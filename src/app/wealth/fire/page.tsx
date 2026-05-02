@@ -34,13 +34,13 @@ export default async function FirePage() {
   const [properties, superAccounts, cashAccounts, fireSettings, portfolios, inheritances] =
     await Promise.all([
       prisma.property.findMany({
-        where: { userId },
+        where: { userId, soldDate: null },
         include: { mortgage: true },
       }),
       prisma.superAccount.findMany({ where: { userId } }),
       prisma.cashAccount.findMany({ where: { userId } }),
       prisma.fireSettings.findUnique({ where: { userId } }),
-      prisma.portfolio.findMany({ where: { userId }, select: { id: true } }),
+      prisma.portfolio.findMany({ where: { userId }, select: { id: true, portfolioType: true } }),
       prisma.anticipatedInheritance.findMany({
         where: { userId, includeInFire: true },
         orderBy: { expectedYear: 'asc' },
@@ -57,7 +57,8 @@ export default async function FirePage() {
     )
   )
 
-  const sharesValue = snapshots.reduce((sum, s) => sum + (s?.value ?? 0), 0)
+  const sharesValue = snapshots.reduce((sum, s, i) => portfolios[i].portfolioType !== 'TERM_DEPOSIT' ? sum + (s?.value ?? 0) : sum, 0)
+  const tdValue     = snapshots.reduce((sum, s, i) => portfolios[i].portfolioType === 'TERM_DEPOSIT'  ? sum + (s?.value ?? 0) : sum, 0)
   const propertyEquity = properties.reduce(
     (sum, p) =>
       sum + p.currentValue * (p.ownershipPct / 100) - (p.mortgage?.currentBalance ?? 0),
@@ -76,6 +77,7 @@ export default async function FirePage() {
 
   const snap: WealthSnapshot = {
     sharesValue,
+    tdValue,
     propertyEquity,
     superBalance,
     cashBalance,

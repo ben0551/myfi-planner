@@ -17,11 +17,11 @@ export default async function WealthPage() {
   const userId = session.user.id
 
   const [properties, superAccounts, cashAccounts, fireSettings, portfolios, inheritances, allGoals] = await Promise.all([
-    prisma.property.findMany({ where: { userId }, include: { mortgage: true }, orderBy: { name: 'asc' } }),
+    prisma.property.findMany({ where: { userId, soldDate: null }, include: { mortgage: true }, orderBy: { name: 'asc' } }),
     prisma.superAccount.findMany({ where: { userId }, orderBy: { fundName: 'asc' } }),
     prisma.cashAccount.findMany({ where: { userId }, orderBy: { name: 'asc' } }),
     prisma.fireSettings.findUnique({ where: { userId } }),
-    prisma.portfolio.findMany({ where: { userId }, select: { id: true, name: true } }),
+    prisma.portfolio.findMany({ where: { userId }, select: { id: true, name: true, portfolioType: true } }),
     prisma.anticipatedInheritance.findMany({ where: { userId }, orderBy: { expectedYear: 'asc' } }),
     prisma.goal.findMany({
       where: { portfolio: { userId } },
@@ -34,16 +34,17 @@ export default async function WealthPage() {
     portfolios.map((p) => prisma.portfolioSnapshot.findFirst({ where: { portfolioId: p.id }, orderBy: { date: 'desc' } }))
   )
 
-  const sharesValue = snapshots.reduce((s, snap) => s + (snap?.value ?? 0), 0)
+  const sharesValue = snapshots.reduce((s, snap, i) => portfolios[i].portfolioType !== 'TERM_DEPOSIT' ? s + (snap?.value ?? 0) : s, 0)
+  const tdValue     = snapshots.reduce((s, snap, i) => portfolios[i].portfolioType === 'TERM_DEPOSIT' ? s + (snap?.value ?? 0) : s, 0)
   const propertyGrossValue = properties.reduce((s, p) => s + p.currentValue * (p.ownershipPct / 100), 0)
   const totalMortgages = properties.reduce((s, p) => s + (p.mortgage?.currentBalance ?? 0), 0)
   const propertyEquity = propertyGrossValue - totalMortgages
   const superBalance = superAccounts.reduce((s, a) => s + a.currentBalance, 0)
   const cashBalance = cashAccounts.reduce((s, a) => s + a.balance, 0)
 
-  const totalAssets = sharesValue + propertyGrossValue + superBalance + cashBalance
+  const totalAssets = sharesValue + tdValue + propertyGrossValue + superBalance + cashBalance
   const totalLiabilities = totalMortgages
-  const snap: WealthSnapshot = { sharesValue, propertyEquity, superBalance, cashBalance, propertyDebt: totalMortgages, propertyGrossValue }
+  const snap: WealthSnapshot = { sharesValue, tdValue, propertyEquity, superBalance, cashBalance, propertyDebt: totalMortgages, propertyGrossValue }
   const settings = fireSettings ?? { includePropertyEquity: true, includeSuper: true, includeCash: true }
   const netWorth = computeNetWorth(snap, settings)
 
@@ -66,7 +67,7 @@ export default async function WealthPage() {
 
   void recordNetWorthSnapshot(userId, {
     totalAssets, totalLiabilities, netWorth,
-    sharesValue, propertyValue: propertyGrossValue, superBalance, cashBalance,
+    sharesValue, tdValue, propertyValue: propertyGrossValue, superBalance, cashBalance,
   })
 
   return (
@@ -155,10 +156,10 @@ export default async function WealthPage() {
             {portfolios.map((p, i) => (
               <Link key={p.id} href={`/portfolios/${p.id}`} className="flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors group">
                 <div className="flex items-center gap-3">
-                  <span className="text-lg">📈</span>
+                  <span className="text-lg">{p.portfolioType === 'TERM_DEPOSIT' ? '💵' : '📈'}</span>
                   <div>
                     <p className="text-sm font-medium text-gray-800 group-hover:text-indigo-600">{p.name}</p>
-                    <p className="text-xs text-gray-400">Investment portfolio</p>
+                    <p className="text-xs text-gray-400">{p.portfolioType === 'TERM_DEPOSIT' ? 'Term deposit' : 'Investment portfolio'}</p>
                   </div>
                 </div>
                 <span className="text-sm font-semibold text-gray-900">

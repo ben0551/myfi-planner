@@ -23,10 +23,20 @@ export async function GET() {
       },
     }),
     prisma.property.findMany({
-      where: { userId },
+      where: { userId },  // include sold properties so history isn't erased
       include: {
         valueHistory: { orderBy: { date: 'asc' }, select: { date: true, value: true } },
-        mortgage: { select: { currentBalance: true } },
+        mortgage: {
+          select: {
+            originalAmount: true,
+            currentBalance: true,
+            interestRate: true,
+            loanType: true,
+            repaymentFreq: true,
+            startDate: true,
+            termYears: true,
+          },
+        },
       },
     }),
     prisma.cashAccount.findMany({
@@ -39,15 +49,18 @@ export async function GET() {
 
   // ── Build per-source histories as { date: string, value: number }[] ─────────
 
-  // Sum portfolio snapshots by date across all portfolios
-  const portfolioByDate = new Map<string, number>()
+  // Sum portfolio snapshots by date, split by type
+  const sharesByDate = new Map<string, number>()
+  const tdByDate     = new Map<string, number>()
   for (const p of portfolios) {
+    const map = p.portfolioType === 'TERM_DEPOSIT' ? tdByDate : sharesByDate
     for (const s of p.snapshots) {
       const d = toDateStr(s.date)
-      portfolioByDate.set(d, (portfolioByDate.get(d) ?? 0) + s.value)
+      map.set(d, (map.get(d) ?? 0) + s.value)
     }
   }
-  const portfolioHistory = mapToSortedArray(portfolioByDate)
+  const sharesHistory = mapToSortedArray(sharesByDate)
+  const tdHistory     = mapToSortedArray(tdByDate)
 
   // Sum super balances by date (most recent entry per account per date, then sum across accounts)
   const superByDate = new Map<string, number>()
@@ -65,23 +78,35 @@ export async function GET() {
   }
   const superHistory = mapToSortedArray(superByDate)
 
-  // Sum property values by date (adjusted for ownership %)
-  const propertyByDate = new Map<string, number>()
-  let totalMortgageBalance = 0
+  // Build per-property histories so sold properties stop contributing after their soldDate
+  type PropHistory = {
+    history: { date: string; value: number }[]
+    soldDateStr: string | null
+    mortgage: MortgageSnapshot | null
+  }
+  const perPropertyHistories: PropHistory[] = []
   for (const p of properties) {
     const pct = p.ownershipPct / 100
-    totalMortgageBalance += p.mortgage?.currentBalance ?? 0
-    for (const h of p.valueHistory) {
-      const d = toDateStr(h.date)
-      propertyByDate.set(d, (propertyByDate.get(d) ?? 0) + h.value * pct)
+    const soldDateStr = p.soldDate ? toDateStr(p.soldDate) : null
+
+    let history: { date: string; value: number }[]
+    if (p.valueHistory.length > 0) {
+      history = p.valueHistory
+        .filter((h) => !soldDateStr || toDateStr(h.date) <= soldDateStr)
+        .map((h) => ({ date: toDateStr(h.date), value: h.value * pct }))
+    } else if (!soldDateStr) {
+      history = [{ date: toDateStr(p.createdAt), value: p.currentValue * pct }]
+    } else {
+      history = []
     }
-    if (p.valueHistory.length === 0) {
-      // No history — use createdAt with current value
-      const d = toDateStr(p.createdAt)
-      propertyByDate.set(d, (propertyByDate.get(d) ?? 0) + p.currentValue * pct)
-    }
+    perPropertyHistories.push({ history, soldDateStr, mortgage: p.mortgage ?? null })
   }
-  const propertyHistory = mapToSortedArray(propertyByDate)
+
+  // Collect all property dates so they appear in sortedDates
+  const propertyAllDates = new Set<string>()
+  for (const { history } of perPropertyHistories) {
+    for (const h of history) propertyAllDates.add(h.date)
+  }
 
   // Sum cash balances by date
   const cashByDate = new Map<string, number>()
@@ -100,10 +125,11 @@ export async function GET() {
   // ── Collect all unique dates, sorted ─────────────────────────────────────────
 
   const allDates = new Set<string>()
-  for (const h of portfolioHistory) allDates.add(h.date)
-  for (const h of superHistory) allDates.add(h.date)
-  for (const h of propertyHistory) allDates.add(h.date)
-  for (const h of cashHistory) allDates.add(h.date)
+  for (const h of sharesHistory) allDates.add(h.date)
+  for (const h of tdHistory)     allDates.add(h.date)
+  for (const h of superHistory)  allDates.add(h.date)
+  for (const d of propertyAllDates) allDates.add(d)
+  for (const h of cashHistory)   allDates.add(h.date)
 
   const sortedDates = Array.from(allDates).sort()
   if (sortedDates.length === 0) return Response.json([])
@@ -112,16 +138,26 @@ export async function GET() {
   // For each date, each component uses its last known value on or before that date.
 
   const result = sortedDates.map((date) => {
-    const sharesValue = carryForward(portfolioHistory, date) ?? 0
-    const superBalance = carryForward(superHistory, date) ?? 0
-    const propertyValue = carryForward(propertyHistory, date) ?? 0
-    const cashBalance = carryForward(cashHistory, date) ?? 0
+    const sharesValue  = carryForward(sharesHistory, date) ?? 0
+    const tdValue      = carryForward(tdHistory,     date) ?? 0
+    const superBalance = carryForward(superHistory,  date) ?? 0
+    const cashBalance  = carryForward(cashHistory,   date) ?? 0
+    // Sum each property's carry-forward value and amortized debt, stopping after its soldDate
+    let propertyValue = 0
+    let totalLiabilities = 0
+    const dateObj = new Date(date)
+    for (const { history, soldDateStr, mortgage } of perPropertyHistories) {
+      if (soldDateStr && date > soldDateStr) continue  // sold before this date
+      propertyValue += carryForward(history, date) ?? 0
+      if (mortgage) {
+        totalLiabilities += amortizedBalance(mortgage, dateObj)
+      }
+    }
 
-    const totalAssets = sharesValue + propertyValue + superBalance + cashBalance
-    const totalLiabilities = totalMortgageBalance  // constant — no historical mortgage data
+    const totalAssets = sharesValue + tdValue + propertyValue + superBalance + cashBalance
     const netWorth = totalAssets - totalLiabilities
 
-    return { date, netWorth, totalAssets, totalLiabilities, sharesValue, propertyValue, superBalance, cashBalance }
+    return { date, netWorth, totalAssets, totalLiabilities, sharesValue, tdValue, propertyValue, superBalance, cashBalance }
   })
 
   // ── Thin down daily data to keep the payload reasonable ─────────────────────
@@ -142,6 +178,54 @@ export async function GET() {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+type MortgageSnapshot = {
+  originalAmount: number
+  currentBalance: number
+  interestRate: number
+  loanType: string
+  repaymentFreq: string
+  startDate: Date
+  termYears: number
+}
+
+/**
+ * Estimates the amortized mortgage balance at a given date.
+ * For P&I loans uses the standard amortization formula.
+ * For IO loans the balance is flat (principal never reduces).
+ * Clamps to [0, originalAmount].
+ */
+function amortizedBalance(m: MortgageSnapshot, atDate: Date): number {
+  if (m.loanType === 'IO') return m.originalAmount
+
+  const periodsPerYear = m.repaymentFreq === 'WEEKLY' ? 52
+    : m.repaymentFreq === 'FORTNIGHTLY' ? 26
+    : 12  // MONTHLY default
+
+  const r = m.interestRate / 100 / periodsPerYear
+  const n = m.termYears * periodsPerYear
+  const startMs = m.startDate.getTime()
+  const atMs = atDate.getTime()
+
+  // Periods elapsed (fractional OK — formula handles it)
+  const elapsed = ((atMs - startMs) / (365.25 * 24 * 3600 * 1000)) * periodsPerYear
+
+  if (elapsed <= 0) return m.originalAmount
+  if (elapsed >= n) return 0
+
+  let balance: number
+  if (r === 0) {
+    // Zero-rate edge case: linear paydown
+    balance = m.originalAmount * (1 - elapsed / n)
+  } else {
+    // Standard amortization: B(t) = P*(1+r)^t - PMT*((1+r)^t - 1)/r
+    const pmt = (m.originalAmount * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1)
+    const factor = Math.pow(1 + r, elapsed)
+    balance = m.originalAmount * factor - pmt * (factor - 1) / r
+  }
+
+  return Math.max(0, Math.min(m.originalAmount, balance))
+}
 
 function toDateStr(d: Date): string {
   return d.toISOString().slice(0, 10)

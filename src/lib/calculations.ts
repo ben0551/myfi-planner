@@ -52,12 +52,21 @@ export function buildHoldings(
       const costOfSold = h.avgCost.times(qty)
       h.realisedGain = h.realisedGain.plus(proceeds.minus(costOfSold))
       const newQty = h.quantity.minus(qty)
-      // avgCost stays the same; reduce costBasis proportionally
       h.totalCostBasis = newQty.gt(0) ? h.avgCost.times(newQty) : new Decimal(0)
       h.quantity = newQty.lt(0) ? new Decimal(0) : newQty
     } else if (tx.type === 'DIVIDEND') {
       const amount = tx.amount ? new Decimal(tx.amount.toString()) : new Decimal(0)
       h.dividendsReceived = h.dividendsReceived.plus(amount)
+    } else if (tx.type === 'DRP') {
+      // Dividend Reinvestment Plan: new shares acquired at DRP price, funded by dividend
+      const cost = qty.times(price)
+      const newQty = h.quantity.plus(qty)
+      h.totalCostBasis = h.totalCostBasis.plus(cost)
+      h.avgCost = newQty.gt(0) ? h.totalCostBasis.dividedBy(newQty) : new Decimal(0)
+      h.quantity = newQty
+      // The reinvested dividend counts as dividend income
+      const drpIncome = tx.amount ? new Decimal(tx.amount.toString()) : cost
+      h.dividendsReceived = h.dividendsReceived.plus(drpIncome)
     }
   }
 
@@ -147,6 +156,15 @@ export function computePortfolioPerformance(
     } else if (tx.type === 'DIVIDEND') {
       const amount = tx.amount ? new Decimal(tx.amount.toString()) : new Decimal(0)
       totalDividends = totalDividends.plus(amount)
+    } else if (tx.type === 'DRP') {
+      const cost = qty.times(price)
+      totalInvested = totalInvested.plus(cost)
+      const newQty = h.quantity.plus(qty)
+      h.totalCostBasis = h.totalCostBasis.plus(cost)
+      h.avgCost = newQty.gt(0) ? h.totalCostBasis.dividedBy(newQty) : new Decimal(0)
+      h.quantity = newQty
+      const drpIncome = tx.amount ? new Decimal(tx.amount.toString()) : cost
+      totalDividends = totalDividends.plus(drpIncome)
     }
   }
 
