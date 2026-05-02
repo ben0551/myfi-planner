@@ -40,11 +40,36 @@ export default async function WealthPage() {
     if (!snapshotValueMap.has(s.portfolioId)) snapshotValueMap.set(s.portfolioId, s.value)
   }
 
-  let sharesValue = 0, tdValue = 0
-  for (const p of portfolios) {
-    const v = snapshotValueMap.get(p.id) ?? 0
-    if (p.portfolioType === 'TERM_DEPOSIT') tdValue += v
-    else sharesValue += v
+  const sharesValue = portfolios
+    .filter((p) => p.portfolioType !== 'TERM_DEPOSIT')
+    .reduce((sum, p) => sum + (snapshotValueMap.get(p.id) ?? 0), 0)
+
+  // TD value from BUY/SELL transactions (correct start date, not page-visit date)
+  const tdPortfolios = portfolios.filter((p) => p.portfolioType === 'TERM_DEPOSIT')
+  let tdValue = 0
+  if (tdPortfolios.length > 0) {
+    const tdTxns = await prisma.transaction.findMany({
+      where: { portfolioId: { in: tdPortfolios.map((p) => p.id) }, type: { in: ['BUY', 'SELL'] } },
+      select: { portfolioId: true, type: true, quantity: true, price: true, amount: true },
+    })
+    const tdTxnMap = new Map<string, typeof tdTxns>()
+    for (const t of tdTxns) {
+      if (!tdTxnMap.has(t.portfolioId)) tdTxnMap.set(t.portfolioId, [])
+      tdTxnMap.get(t.portfolioId)!.push(t)
+    }
+    for (const p of tdPortfolios) {
+      const txns = tdTxnMap.get(p.id) ?? []
+      if (txns.length > 0) {
+        let invested = 0
+        for (const t of txns) {
+          const v = t.amount != null ? Number(t.amount) : Number(t.quantity) * Number(t.price)
+          invested = t.type === 'BUY' ? invested + v : Math.max(0, invested - v)
+        }
+        tdValue += invested
+      } else {
+        tdValue += snapshotValueMap.get(p.id) ?? 0
+      }
+    }
   }
   const propertyGrossValue = properties.reduce((s, p) => s + p.currentValue * (p.ownershipPct / 100), 0)
   const totalMortgages = properties.reduce((s, p) => s + (p.mortgage?.currentBalance ?? 0) * (p.ownershipPct / 100), 0)

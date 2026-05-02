@@ -78,11 +78,42 @@ export default async function DashboardPage() {
   const snapshotMap = new Map(latestSnapshots.map((s) => [s.portfolioId, s]))
 
   // ── Wealth totals ──────────────────────────────────────────────────────────
-  const portfolioTypeMap = new Map(portfolios.map((p) => [p.id, p.portfolioType]))
-  const sharesValue = latestSnapshots.reduce((s, snap) => portfolioTypeMap.get(snap.portfolioId) !== 'TERM_DEPOSIT' ? s + snap.value : s, 0)
-  const tdValue     = latestSnapshots.reduce((s, snap) => portfolioTypeMap.get(snap.portfolioId) === 'TERM_DEPOSIT'  ? s + snap.value : s, 0)
+  const sharesValue = latestSnapshots.reduce((s, snap) => {
+    const p = portfolios.find((p) => p.id === snap.portfolioId)
+    return p?.portfolioType !== 'TERM_DEPOSIT' ? s + snap.value : s
+  }, 0)
+
+  // TD value from BUY/SELL transactions (correct start date, not page-visit date)
+  const tdPortfolioIds2 = portfolios.filter((p) => p.portfolioType === 'TERM_DEPOSIT').map((p) => p.id)
+  let tdValue = 0
+  if (tdPortfolioIds2.length > 0) {
+    const tdTxns = await prisma.transaction.findMany({
+      where: { portfolioId: { in: tdPortfolioIds2 }, type: { in: ['BUY', 'SELL'] } },
+      select: { portfolioId: true, type: true, quantity: true, price: true, amount: true },
+    })
+    const tdTxnMap = new Map<string, typeof tdTxns>()
+    for (const t of tdTxns) {
+      if (!tdTxnMap.has(t.portfolioId)) tdTxnMap.set(t.portfolioId, [])
+      tdTxnMap.get(t.portfolioId)!.push(t)
+    }
+    for (const pid of tdPortfolioIds2) {
+      const txns = tdTxnMap.get(pid) ?? []
+      if (txns.length > 0) {
+        let invested = 0
+        for (const t of txns) {
+          const v = t.amount != null ? Number(t.amount) : Number(t.quantity) * Number(t.price)
+          invested = t.type === 'BUY' ? invested + v : Math.max(0, invested - v)
+        }
+        tdValue += invested
+      } else {
+        const snap = latestSnapshots.find((s) => s.portfolioId === pid)
+        tdValue += snap?.value ?? 0
+      }
+    }
+  }
+
   const propertyGrossValue = properties.reduce((s, p) => s + p.currentValue * (p.ownershipPct / 100), 0)
-  const totalMortgages = properties.reduce((s, p) => s + (p.mortgage?.currentBalance ?? 0), 0)
+  const totalMortgages = properties.reduce((s, p) => s + (p.mortgage?.currentBalance ?? 0) * (p.ownershipPct / 100), 0)
   const propertyEquity = propertyGrossValue - totalMortgages
   const superBalance = superAccounts.reduce((s, a) => s + a.currentBalance, 0)
   const cashBalance = cashAccounts.reduce((s, a) => s + a.balance, 0)

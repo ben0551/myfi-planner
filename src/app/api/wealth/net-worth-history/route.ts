@@ -50,13 +50,49 @@ export async function GET() {
 
   // ── Build per-source histories as { date: string, value: number }[] ─────────
 
-  // TERM_DEPOSIT portfolios: use snapshots (no historical market prices to reconstruct from)
-  const tdByDate = new Map<string, number>()
-  for (const p of portfolios) {
-    if (p.portfolioType !== 'TERM_DEPOSIT') continue
-    for (const s of p.snapshots) {
-      const d = toDateStr(s.date)
-      tdByDate.set(d, (tdByDate.get(d) ?? 0) + s.value)
+  // TERM_DEPOSIT portfolios: always reconstruct from BUY/SELL transactions so the start
+  // date reflects when the TD was actually opened, not when the portfolio page was first visited.
+  // Snapshots are only used as a last resort when no transactions exist.
+  type PortfolioHistory = { date: string; value: number }[]
+  const tdHistories: PortfolioHistory[] = []
+
+  const tdPortfolioIds = portfolios
+    .filter((p) => p.portfolioType === 'TERM_DEPOSIT')
+    .map((p) => p.id)
+
+  if (tdPortfolioIds.length > 0) {
+    const tdTxns = await prisma.transaction.findMany({
+      where: { portfolioId: { in: tdPortfolioIds }, type: { in: ['BUY', 'SELL'] } },
+      orderBy: { date: 'asc' },
+      select: { portfolioId: true, type: true, date: true, quantity: true, price: true, amount: true },
+    })
+    const txnsByPortfolio = new Map<string, typeof tdTxns>()
+    for (const t of tdTxns) {
+      if (!txnsByPortfolio.has(t.portfolioId)) txnsByPortfolio.set(t.portfolioId, [])
+      txnsByPortfolio.get(t.portfolioId)!.push(t)
+    }
+    for (const pid of tdPortfolioIds) {
+      const txns = txnsByPortfolio.get(pid) ?? []
+      if (txns.length > 0) {
+        const hist: PortfolioHistory = []
+        let invested = 0
+        for (const t of txns) {
+          const v = t.amount != null ? Number(t.amount) : Number(t.quantity) * Number(t.price)
+          invested = t.type === 'BUY' ? invested + v : Math.max(0, invested - v)
+          hist.push({ date: toDateStr(t.date), value: invested })
+        }
+        tdHistories.push(hist)
+      } else {
+        // No transactions recorded — fall back to snapshots if any exist
+        const p = portfolios.find((p) => p.id === pid)!
+        if (p.snapshots.length > 0) {
+          tdHistories.push(
+            p.snapshots
+              .map((s) => ({ date: toDateStr(s.date), value: s.value }))
+              .sort((a, b) => a.date.localeCompare(b.date))
+          )
+        }
+      }
     }
   }
 
@@ -189,7 +225,6 @@ export async function GET() {
   }
 
   const sharesHistory = mapToSortedArray(sharesByDate)
-  const tdHistory     = mapToSortedArray(tdByDate)
 
   // Sum super balances by date (most recent entry per account per date, then sum across accounts)
   const superByDate = new Map<string, number>()
@@ -254,9 +289,9 @@ export async function GET() {
   // ── Collect all unique dates, sorted ─────────────────────────────────────────
 
   const allDates = new Set<string>()
-  for (const h of sharesHistory) allDates.add(h.date)
-  for (const h of tdHistory)     allDates.add(h.date)
-  for (const h of superHistory)  allDates.add(h.date)
+  for (const h of sharesHistory)               allDates.add(h.date)
+  for (const hist of tdHistories) { for (const h of hist) allDates.add(h.date) }
+  for (const h of superHistory)                allDates.add(h.date)
   for (const d of propertyAllDates) allDates.add(d)
   for (const h of cashHistory)   allDates.add(h.date)
 
@@ -268,7 +303,7 @@ export async function GET() {
 
   const result = sortedDates.map((date) => {
     const sharesValue  = carryForward(sharesHistory, date) ?? 0
-    const tdValue      = carryForward(tdHistory,     date) ?? 0
+    const tdValue      = tdHistories.reduce((sum, hist) => sum + (carryForward(hist, date) ?? 0), 0)
     const superBalance = carryForward(superHistory,  date) ?? 0
     const cashBalance  = carryForward(cashHistory,   date) ?? 0
     // Sum each property's carry-forward value and amortized debt, stopping after its soldDate

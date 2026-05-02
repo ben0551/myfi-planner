@@ -47,25 +47,58 @@ export default async function FirePage() {
       }),
     ])
 
-  // Latest snapshots
-  const snapshots = await Promise.all(
-    portfolios.map((p) =>
-      prisma.portfolioSnapshot.findFirst({
-        where: { portfolioId: p.id },
-        orderBy: { date: 'desc' },
-      })
-    )
-  )
+  // Batch snapshot query (avoids N+1)
+  const allSnapshots = await prisma.portfolioSnapshot.findMany({
+    where: { portfolioId: { in: portfolios.map((p) => p.id) } },
+    orderBy: { date: 'desc' },
+    select: { portfolioId: true, value: true },
+  })
+  const snapshotValueMap = new Map<string, number>()
+  for (const s of allSnapshots) {
+    if (!snapshotValueMap.has(s.portfolioId)) snapshotValueMap.set(s.portfolioId, s.value)
+  }
 
-  const sharesValue = snapshots.reduce((sum, s, i) => portfolios[i].portfolioType !== 'TERM_DEPOSIT' ? sum + (s?.value ?? 0) : sum, 0)
-  const tdValue     = snapshots.reduce((sum, s, i) => portfolios[i].portfolioType === 'TERM_DEPOSIT'  ? sum + (s?.value ?? 0) : sum, 0)
+  // TD value: use BUY/SELL transactions so history starts at the TD's actual open date,
+  // not when the portfolio page was first visited (which is when snapshots are written).
+  const tdPortfolios = portfolios.filter((p) => p.portfolioType === 'TERM_DEPOSIT')
+  let tdValue = 0
+  if (tdPortfolios.length > 0) {
+    const tdTxns = await prisma.transaction.findMany({
+      where: { portfolioId: { in: tdPortfolios.map((p) => p.id) }, type: { in: ['BUY', 'SELL'] } },
+      select: { portfolioId: true, type: true, quantity: true, price: true, amount: true },
+    })
+    const tdTxnMap = new Map<string, typeof tdTxns>()
+    for (const t of tdTxns) {
+      if (!tdTxnMap.has(t.portfolioId)) tdTxnMap.set(t.portfolioId, [])
+      tdTxnMap.get(t.portfolioId)!.push(t)
+    }
+    for (const p of tdPortfolios) {
+      const txns = tdTxnMap.get(p.id) ?? []
+      if (txns.length > 0) {
+        let invested = 0
+        for (const t of txns) {
+          const v = t.amount != null ? Number(t.amount) : Number(t.quantity) * Number(t.price)
+          invested = t.type === 'BUY' ? invested + v : Math.max(0, invested - v)
+        }
+        tdValue += invested
+      } else {
+        tdValue += snapshotValueMap.get(p.id) ?? 0
+      }
+    }
+  }
+
+  const sharesValue = portfolios
+    .filter((p) => p.portfolioType !== 'TERM_DEPOSIT')
+    .reduce((sum, p) => sum + (snapshotValueMap.get(p.id) ?? 0), 0)
+
+  // Apply ownership % to both asset and liability sides so equity is correct
   const propertyEquity = properties.reduce(
     (sum, p) =>
-      sum + p.currentValue * (p.ownershipPct / 100) - (p.mortgage?.currentBalance ?? 0),
+      sum + (p.currentValue - (p.mortgage?.currentBalance ?? 0)) * (p.ownershipPct / 100),
     0
   )
   const propertyDebt = properties.reduce(
-    (sum, p) => sum + (p.mortgage?.currentBalance ?? 0),
+    (sum, p) => sum + (p.mortgage?.currentBalance ?? 0) * (p.ownershipPct / 100),
     0
   )
   const propertyGrossValue = properties.reduce(
@@ -501,8 +534,9 @@ export default async function FirePage() {
         <h2 className="text-sm font-semibold text-gray-700 mb-3">
           Current Wealth Snapshot
         </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           <SnapItem label="Shares" value={formatCurrency(sharesValue)} color="indigo" />
+          <SnapItem label="Term Deposits" value={formatCurrency(tdValue)} color="violet" />
           <SnapItem
             label="Property Equity"
             value={formatCurrency(propertyEquity)}
@@ -546,6 +580,7 @@ function SnapItem({
     emerald: 'text-emerald-700',
     amber: 'text-amber-700',
     sky: 'text-sky-700',
+    violet: 'text-violet-700',
   }
   return (
     <div className={included ? '' : 'opacity-40'}>
