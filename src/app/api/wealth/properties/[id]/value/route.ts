@@ -51,17 +51,21 @@ export async function POST(
 
   const recordDate = date ? new Date(date) : new Date()
 
-  const [entry] = await prisma.$transaction([
-    prisma.propertyValueHistory.upsert({
-      where: { propertyId_date: { propertyId: id, date: recordDate } },
-      create: { propertyId: id, date: recordDate, value },
-      update: { value },
-    }),
-    prisma.property.update({
-      where: { id },
-      data: { currentValue: value },
-    }),
-  ])
+  const entry = await prisma.propertyValueHistory.upsert({
+    where: { propertyId_date: { propertyId: id, date: recordDate } },
+    create: { propertyId: id, date: recordDate, value },
+    update: { value },
+  })
+
+  // Always sync currentValue to the most recent history entry — guards against
+  // adding an older historical valuation overwriting a newer one
+  const latest = await prisma.propertyValueHistory.findFirst({
+    where: { propertyId: id },
+    orderBy: { date: 'desc' },
+  })
+  if (latest) {
+    await prisma.property.update({ where: { id }, data: { currentValue: latest.value } })
+  }
 
   return Response.json(entry, { status: 201 })
 }

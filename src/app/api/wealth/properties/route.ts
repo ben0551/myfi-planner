@@ -11,7 +11,36 @@ export async function GET() {
     include: { mortgage: true },
     orderBy: { name: 'asc' },
   })
-  return Response.json(properties)
+
+  // Sync currentValue to the latest history entry for any properties that are out of sync.
+  // This self-heals data if a historical valuation was added after a more recent one.
+  const latestHistory = await prisma.propertyValueHistory.findMany({
+    where: { propertyId: { in: properties.map((p) => p.id) } },
+    orderBy: { date: 'desc' },
+    distinct: ['propertyId'],
+  })
+  const latestMap = new Map(latestHistory.map((h) => [h.propertyId, h.value]))
+
+  await Promise.all(
+    properties
+      .filter((p) => {
+        const latest = latestMap.get(p.id)
+        return latest !== undefined && latest !== p.currentValue
+      })
+      .map((p) =>
+        prisma.property.update({ where: { id: p.id }, data: { currentValue: latestMap.get(p.id)! } })
+      )
+  )
+
+  // Reflect corrections in the returned data
+  return Response.json(
+    properties.map((p) => {
+      const latest = latestMap.get(p.id)
+      return latest !== undefined && latest !== p.currentValue
+        ? { ...p, currentValue: Number(latest) }
+        : p
+    })
+  )
 }
 
 export async function POST(request: NextRequest) {
