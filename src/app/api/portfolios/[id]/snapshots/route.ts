@@ -13,12 +13,56 @@ export async function GET(
 
   const portfolio = await prisma.portfolio.findUnique({
     where: { id, userId: session.user.id },
-    select: { id: true, portfolioType: true },
+    select: {
+      id: true, portfolioType: true,
+      tdPrincipal: true, tdRate: true, tdStartDate: true, tdMaturityDate: true,
+    },
   })
   if (!portfolio) return Response.json({ error: 'Not found' }, { status: 404 })
 
-  // TERM_DEPOSIT portfolios have no HistoricalPrice data — fall back to snapshots
+  // TERM_DEPOSIT: compute value history from TD parameters so the chart starts
+  // at tdStartDate regardless of whether the portfolio page has been visited.
   if (portfolio.portfolioType === 'TERM_DEPOSIT') {
+    if (portfolio.tdPrincipal && portfolio.tdRate && portfolio.tdStartDate && portfolio.tdMaturityDate) {
+      const principal    = portfolio.tdPrincipal
+      const rate         = portfolio.tdRate / 100
+      const startDate    = portfolio.tdStartDate
+      const maturityDate = portfolio.tdMaturityDate
+      const today        = new Date()
+      const endDate      = today < maturityDate ? today : maturityDate
+
+      function tdValueAt(d: Date): number {
+        const days = Math.max(0, (d.getTime() - startDate.getTime()) / 86400000)
+        return principal + principal * rate * (days / 365)
+      }
+
+      const points: { date: string; value: number; invested: number }[] = [
+        { date: toDateStr(startDate), value: principal, invested: principal },
+      ]
+
+      const cur = new Date(startDate)
+      cur.setMonth(cur.getMonth() + 1)
+      while (cur <= endDate) {
+        points.push({ date: toDateStr(cur), value: tdValueAt(cur), invested: principal })
+        cur.setMonth(cur.getMonth() + 1)
+      }
+
+      const endStr = toDateStr(endDate)
+      if (!points.some((p) => p.date === endStr)) {
+        points.push({ date: endStr, value: tdValueAt(endDate), invested: principal })
+      }
+
+      // Deduplicate by date (keep last) and sort
+      const byDate = new Map<string, { value: number; invested: number }>()
+      for (const p of points) byDate.set(p.date, { value: p.value, invested: p.invested })
+      return Response.json(
+        Array.from(byDate.entries())
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([date, v]) => ({ date, ...v }))
+      )
+    }
+
+    // Fallback: TD without parameters, use snapshots
     const snapshots = await prisma.portfolioSnapshot.findMany({
       where: { portfolioId: id },
       orderBy: { date: 'asc' },
