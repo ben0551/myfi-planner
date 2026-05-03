@@ -154,12 +154,14 @@ model Transaction {
   frankingPct    Float  @default(0)   // DIVIDEND only; 0–100 (legacy — prefer frankingCredit)
   frankingCredit Float  @default(0)   // DIVIDEND/DRP only; actual ATO franking credit $ amount
   notes       String?
+  deletedAt   DateTime?       // soft-delete: set when "deleted", filter in app queries
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
   portfolio   Portfolio       @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
 
   @@index([portfolioId])
   @@index([ticker])
+  @@index([deletedAt])
 }
 
 enum TransactionType {
