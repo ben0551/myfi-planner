@@ -8,7 +8,6 @@ import { computeNetWorth, WealthSnapshot } from '@/lib/wealth'
 import { calcTermDeposit } from '@/lib/termDeposit'
 import { NetWorthHistoryChart } from '@/components/wealth/NetWorthHistoryChart'
 import { PortfolioCard } from '@/components/portfolio/PortfolioCard'
-import { recordNetWorthSnapshot } from '@/lib/netWorthSnapshot'
 
 export const dynamic = 'force-dynamic'
 
@@ -116,11 +115,6 @@ export default async function DashboardPage() {
     ? fireSettings.annualExpenses / (fireSettings.withdrawalRate / 100)
     : null
   const fireProgress = fireNumber ? Math.min(100, (netWorth / fireNumber) * 100) : null
-
-  void recordNetWorthSnapshot(userId, {
-    totalAssets, totalLiabilities, netWorth,
-    sharesValue, tdValue, propertyValue: propertyGrossValue, superBalance, cashBalance,
-  })
 
   // ── Goals progress ─────────────────────────────────────────────────────────
   const goalsWithProgress = goals.map((g) => {

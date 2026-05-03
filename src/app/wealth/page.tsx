@@ -7,7 +7,6 @@ import { formatCurrency } from '@/lib/formatters'
 import { computeNetWorth, WealthSnapshot } from '@/lib/wealth'
 import { calcTermDeposit } from '@/lib/termDeposit'
 import { NetWorthHistoryChart } from '@/components/wealth/NetWorthHistoryChart'
-import { recordNetWorthSnapshot } from '@/lib/netWorthSnapshot'
 import { WealthBalanceSheet } from '@/components/wealth/WealthBalanceSheet'
 
 export const dynamic = 'force-dynamic'
@@ -81,11 +80,6 @@ export default async function WealthPage() {
     return { ...g, portfolioValue, pct, daysLeft }
   })
   const activeGoals = goalsWithProgress.filter((g) => g.pct < 100)
-
-  void recordNetWorthSnapshot(userId, {
-    totalAssets, totalLiabilities, netWorth,
-    sharesValue, tdValue, propertyValue: propertyGrossValue, superBalance, cashBalance,
-  })
 
   return (
     <div className="space-y-6">
@@ -234,24 +228,6 @@ export default async function WealthPage() {
           </div>
         </div>
       )}
-
-      {/* Summary totals tile */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
-        <div className="grid grid-cols-3 divide-x divide-gray-100">
-          <div className="px-6 py-5">
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Total Assets</p>
-            <p className="text-xl font-bold text-gray-900">{formatCurrency(totalAssets)}</p>
-          </div>
-          <div className="px-6 py-5">
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Total Liabilities</p>
-            <p className="text-xl font-bold text-gray-900">{formatCurrency(totalLiabilities)}</p>
-          </div>
-          <div className="px-6 py-5">
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Net Worth</p>
-            <p className="text-xl font-bold text-emerald-700">{formatCurrency(netWorth)}</p>
-          </div>
-        </div>
-      </div>
 
       {/* Goals overview */}
       {allGoals.length > 0 && (

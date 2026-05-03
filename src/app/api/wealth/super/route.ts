@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/lib/auth'
+import { CreateSuperSchema, parseBody } from '@/lib/schemas'
 
 export async function GET() {
   const session = await auth()
@@ -17,31 +18,22 @@ export async function POST(request: NextRequest) {
   const session = await auth()
   if (!session) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await request.json()
-  const {
-    fundName,
-    accountNumber,
-    currentBalance,
-    employerContribPct,
-    employeeContribPct,
-    annualSalary,
-    maxConcessional,
-    currency,
-    notes,
-  } = body
+  const result = await parseBody(request, CreateSuperSchema)
+  if (!result.ok) return result.response
+  const data = result.data
 
   const account = await prisma.superAccount.create({
     data: {
       userId: session.user.id,
-      fundName,
-      accountNumber,
-      currentBalance,
-      employerContribPct,
-      employeeContribPct,
-      annualSalary: annualSalary ?? null,
-      maxConcessional: maxConcessional ?? false,
-      currency,
-      notes,
+      fundName: data.fundName,
+      accountNumber: data.accountNumber ?? null,
+      currentBalance: data.currentBalance,
+      employerContribPct: data.employerContribPct,
+      employeeContribPct: data.employeeContribPct,
+      annualSalary: data.annualSalary ?? null,
+      maxConcessional: data.maxConcessional,
+      currency: data.currency,
+      notes: data.notes ?? null,
       balanceUpdatedAt: new Date(),
     },
   })
@@ -50,8 +42,8 @@ export async function POST(request: NextRequest) {
   today.setHours(0, 0, 0, 0)
   await prisma.superBalanceHistory.upsert({
     where: { accountId_date: { accountId: account.id, date: today } },
-    update: { balance: currentBalance },
-    create: { accountId: account.id, date: today, balance: currentBalance },
+    update: { balance: data.currentBalance },
+    create: { accountId: account.id, date: today, balance: data.currentBalance },
   })
 
   return Response.json(account, { status: 201 })
