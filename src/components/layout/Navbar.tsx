@@ -121,9 +121,13 @@ function InlineThemeControls() {
         <button
           onClick={() => setTheme(isDark ? 'light' : 'dark')}
           title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-          className={`relative w-9 h-5 rounded-full transition-colors ${isDark ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-slate-600'}`}
+          className="relative w-9 h-5 rounded-full transition-colors focus:outline-none"
+          style={{ backgroundColor: isDark ? '#4f46e5' : '#d1d5db' }}
         >
-          <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${isDark ? 'translate-x-4' : 'translate-x-0.5'}`} />
+          <span
+            className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all duration-200"
+            style={{ left: isDark ? '18px' : '2px' }}
+          />
         </button>
       </div>
       <div className="flex gap-1.5 flex-wrap">
