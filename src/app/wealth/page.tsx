@@ -8,6 +8,7 @@ import { computeNetWorth, WealthSnapshot } from '@/lib/wealth'
 import { calcTermDeposit } from '@/lib/termDeposit'
 import { NetWorthHistoryChart } from '@/components/wealth/NetWorthHistoryChart'
 import { recordNetWorthSnapshot } from '@/lib/netWorthSnapshot'
+import { WealthBalanceSheet } from '@/components/wealth/WealthBalanceSheet'
 
 export const dynamic = 'force-dynamic'
 
@@ -157,157 +158,43 @@ export default async function WealthPage() {
         <NetWorthHistoryChart />
       </div>
 
-      {/* Balance sheet — two columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-        {/* ASSETS column */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Assets</h2>
-            <span className="text-sm font-bold text-gray-900">{formatCurrency(totalAssets)}</span>
-          </div>
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm divide-y divide-gray-100">
-
-            {/* Investment portfolios */}
-            {portfolios.map((p) => (
-              <Link key={p.id} href={`/portfolios/${p.id}`} className="flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors group">
-                <div className="flex items-center gap-3">
-                  <span className="text-lg">{p.portfolioType === 'TERM_DEPOSIT' ? '💵' : '📈'}</span>
-                  <div>
-                    <p className="text-sm font-medium text-gray-800 group-hover:text-indigo-600">{p.name}</p>
-                    <p className="text-xs text-gray-400">{p.portfolioType === 'TERM_DEPOSIT' ? 'Term deposit' : 'Investment portfolio'}</p>
-                  </div>
-                </div>
-                <span className="text-sm font-semibold text-gray-900">
-                  {formatCurrency(snapshotValueMap.get(p.id) ?? 0)}
-                </span>
-              </Link>
-            ))}
-
-            {/* Properties */}
-            {properties.map((p) => (
-              <Link key={p.id} href={`/wealth/properties/${p.id}`} className="flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors group">
-                <div className="flex items-center gap-3">
-                  <span className="text-lg">🏠</span>
-                  <div>
-                    <p className="text-sm font-medium text-gray-800 group-hover:text-indigo-600">{p.name}</p>
-                    <p className="text-xs text-gray-400">{p.type}{p.ownershipPct < 100 ? ` · ${p.ownershipPct}% owned` : ''}</p>
-                  </div>
-                </div>
-                <span className="text-sm font-semibold text-gray-900">
-                  {formatCurrency(p.currentValue * (p.ownershipPct / 100), p.currency)}
-                </span>
-              </Link>
-            ))}
-
-            {/* Super */}
-            {superAccounts.map((a) => (
-              <Link key={a.id} href={`/wealth/super/${a.id}`} className="flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors group">
-                <div className="flex items-center gap-3">
-                  <span className="text-lg">🦘</span>
-                  <div>
-                    <p className="text-sm font-medium text-gray-800 group-hover:text-indigo-600">{a.fundName}</p>
-                    <p className="text-xs text-gray-400">Superannuation</p>
-                  </div>
-                </div>
-                <span className="text-sm font-semibold text-gray-900">{formatCurrency(a.currentBalance, a.currency)}</span>
-              </Link>
-            ))}
-
-            {/* Cash */}
-            {cashAccounts.map((a) => (
-              <Link key={a.id} href={`/wealth/cash/${a.id}`} className="flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors group">
-                <div className="flex items-center gap-3">
-                  <span className="text-lg">💰</span>
-                  <div>
-                    <p className="text-sm font-medium text-gray-800 group-hover:text-indigo-600">{a.name}</p>
-                    <p className="text-xs text-gray-400">{a.institution ?? 'Cash & savings'}</p>
-                  </div>
-                </div>
-                <span className="text-sm font-semibold text-gray-900">{formatCurrency(a.balance, a.currency)}</span>
-              </Link>
-            ))}
-
-            {/* Empty */}
-            {totalAssets === 0 && (
-              <div className="px-5 py-8 text-center text-sm text-gray-400">
-                No assets yet — add a portfolio, property, super, or cash account.
-              </div>
-            )}
-
-            {/* Total */}
-            <div className="flex items-center justify-between px-5 py-4 bg-gray-50 rounded-b-2xl">
-              <span className="text-sm font-semibold text-gray-700">Total Assets</span>
-              <span className="text-sm font-bold text-gray-900">{formatCurrency(totalAssets)}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* LIABILITIES column */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Liabilities</h2>
-            <span className="text-sm font-bold text-gray-900">{formatCurrency(totalLiabilities)}</span>
-          </div>
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm divide-y divide-gray-100">
-
-            {properties.filter((p) => p.mortgage).map((p) => {
-              const lvr = (p.mortgage!.currentBalance / p.currentValue) * 100
-              return (
-                <Link key={p.id} href={`/wealth/properties/${p.id}`} className="block px-5 py-4 hover:bg-gray-50 transition-colors group">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-3">
-                      <span className="text-lg">🏦</span>
-                      <div>
-                        <p className="text-sm font-medium text-gray-800 group-hover:text-indigo-600">{p.mortgage!.lender}</p>
-                        <p className="text-xs text-gray-400">
-                          {p.name} · {p.mortgage!.interestRate}% p.a. · {p.mortgage!.loanType === 'PI' ? 'P&I' : 'IO'}
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-sm font-semibold text-gray-900">
-                      {formatCurrency(p.mortgage!.currentBalance, p.currency)}
-                    </span>
-                  </div>
-                  {/* LVR bar */}
-                  <div className="ml-9">
-                    <div className="flex justify-between text-xs text-gray-400 mb-1">
-                      <span>LVR {lvr.toFixed(1)}%</span>
-                      <span>Equity {formatCurrency((p.currentValue - p.mortgage!.currentBalance) * (p.ownershipPct / 100), p.currency)}</span>
-                    </div>
-                    <div className="w-full bg-gray-100 rounded-full h-1.5">
-                      <div
-                        className={`h-1.5 rounded-full ${lvr > 80 ? 'bg-red-400' : lvr > 60 ? 'bg-amber-400' : 'bg-emerald-400'}`}
-                        style={{ width: `${Math.min(100, lvr)}%` }}
-                      />
-                    </div>
-                  </div>
-                </Link>
-              )
-            })}
-
-            {totalLiabilities === 0 && (
-              <div className="px-5 py-8 text-center text-sm text-gray-400">
-                No liabilities — add a mortgage via a property.
-              </div>
-            )}
-
-            {/* Total */}
-            <div className="flex items-center justify-between px-5 py-4 bg-gray-50 rounded-b-2xl">
-              <span className="text-sm font-semibold text-gray-700">Total Liabilities</span>
-              <span className="text-sm font-bold text-gray-900">{formatCurrency(totalLiabilities)}</span>
-            </div>
-          </div>
-
-          {/* Add mortgage prompt if properties have none */}
-          {properties.some((p) => !p.mortgage) && (
-            <p className="text-xs text-gray-400 mt-2 px-1">
-              {properties.filter((p) => !p.mortgage).map((p) => p.name).join(', ')} {properties.filter((p) => !p.mortgage).length === 1 ? 'has' : 'have'} no mortgage linked.{' '}
-              <Link href="/wealth/properties" className="text-indigo-500 hover:underline">Add one →</Link>
-            </p>
-          )}
-        </div>
-      </div>
+      {/* Balance sheet — grouped, collapsible */}
+      <WealthBalanceSheet
+        investments={portfolios
+          .filter((p) => p.portfolioType !== 'TERM_DEPOSIT')
+          .map((p) => ({ id: p.id, name: p.name, isTD: false, value: snapshotValueMap.get(p.id) ?? 0 }))}
+        termDeposits={portfolios
+          .filter((p) => p.portfolioType === 'TERM_DEPOSIT')
+          .map((p) => ({
+            id: p.id, name: p.name, isTD: true,
+            value: (p.tdPrincipal && p.tdRate && p.tdStartDate && p.tdMaturityDate)
+              ? calcTermDeposit(p.tdPrincipal, p.tdRate, p.tdStartDate, p.tdMaturityDate).currentValue
+              : (snapshotValueMap.get(p.id) ?? 0),
+          }))}
+        properties={properties.map((p) => {
+          const lvr = p.mortgage ? (p.mortgage.currentBalance / p.currentValue) * 100 : 0
+          return {
+            id: p.id,
+            name: p.name,
+            subtype: p.type,
+            ownershipPct: p.ownershipPct,
+            grossValue: p.currentValue * (p.ownershipPct / 100),
+            currency: p.currency,
+            mortgage: p.mortgage ? {
+              lender: p.mortgage.lender,
+              currentBalance: p.mortgage.currentBalance * (p.ownershipPct / 100),
+              interestRate: p.mortgage.interestRate,
+              loanType: p.mortgage.loanType,
+              lvr,
+              equity: (p.currentValue - p.mortgage.currentBalance) * (p.ownershipPct / 100),
+            } : undefined,
+          }
+        })}
+        superAccounts={superAccounts.map((a) => ({ id: a.id, fundName: a.fundName, balance: a.currentBalance, currency: a.currency }))}
+        cashAccounts={cashAccounts.map((a) => ({ id: a.id, name: a.name, institution: a.institution, balance: a.balance, currency: a.currency }))}
+        totalAssets={totalAssets}
+        totalLiabilities={totalLiabilities}
+      />
 
       {/* Anticipated Inheritances */}
       {inheritances.length > 0 && (
