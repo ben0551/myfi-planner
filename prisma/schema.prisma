@@ -516,6 +516,26 @@ model HouseholdMember {
   @@index([householdId])
 }
 
+// ── FX rates (ECB daily, EUR-base) ────────────────────────────────────────────
+
+/**
+ * Daily FX rates fetched from ECB. Stored as EUR-base (1 EUR = rate * targetCcy).
+ * Cross-currency conversion is done in code by going via EUR.
+ */
+model FxRate {
+  id        String   @id @default(cuid())
+  date      DateTime              // calendar date the rate applies to (UTC midnight)
+  fromCcy   String                // always "EUR" for ECB-sourced rows
+  toCcy     String                // 3-letter ISO target
+  rate      Float                 // 1 fromCcy = rate toCcy
+  source    String   @default("ECB")
+  fetchedAt DateTime @default(now())
+
+  @@unique([date, fromCcy, toCcy])
+  @@index([toCcy, date])
+  @@index([date])
+}
+
 // ── Watchlist ─────────────────────────────────────────────────────────────────
 
 model WatchlistItem {
