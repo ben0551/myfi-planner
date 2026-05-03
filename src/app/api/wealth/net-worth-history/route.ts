@@ -258,6 +258,7 @@ export async function GET() {
     history: { date: string; value: number }[]
     soldDateStr: string | null
     mortgage: MortgageSnapshot | null
+    ownershipPct: number
   }
   const perPropertyHistories: PropHistory[] = []
   for (const p of properties) {
@@ -274,7 +275,7 @@ export async function GET() {
     } else {
       history = []
     }
-    perPropertyHistories.push({ history, soldDateStr, mortgage: p.mortgage ?? null })
+    perPropertyHistories.push({ history, soldDateStr, mortgage: p.mortgage ?? null, ownershipPct: pct })
   }
 
   // Collect all property dates so they appear in sortedDates
@@ -321,11 +322,11 @@ export async function GET() {
     let propertyValue = 0
     let totalLiabilities = 0
     const dateObj = new Date(date)
-    for (const { history, soldDateStr, mortgage } of perPropertyHistories) {
+    for (const { history, soldDateStr, mortgage, ownershipPct } of perPropertyHistories) {
       if (soldDateStr && date > soldDateStr) continue  // sold before this date
       propertyValue += carryForward(history, date) ?? 0
       if (mortgage) {
-        totalLiabilities += amortizedBalance(mortgage, dateObj)
+        totalLiabilities += amortizedBalance(mortgage, dateObj) * ownershipPct
       }
     }
 
@@ -371,21 +372,23 @@ type MortgageSnapshot = {
  * Clamps to [0, originalAmount].
  */
 function amortizedBalance(m: MortgageSnapshot, atDate: Date): number {
-  if (m.loanType === 'IO') return m.originalAmount
-
   const periodsPerYear = m.repaymentFreq === 'WEEKLY' ? 52
     : m.repaymentFreq === 'FORTNIGHTLY' ? 26
     : 12  // MONTHLY default
 
-  const r = m.interestRate / 100 / periodsPerYear
-  const n = m.termYears * periodsPerYear
   const startMs = m.startDate.getTime()
   const atMs = atDate.getTime()
-
-  // Periods elapsed (fractional OK — formula handles it)
   const elapsed = ((atMs - startMs) / (365.25 * 24 * 3600 * 1000)) * periodsPerYear
 
-  if (elapsed <= 0) return m.originalAmount
+  // Before mortgage start: no debt yet
+  if (elapsed < 0) return 0
+
+  // IO loan: principal never reduces; use currentBalance (reflects any lump-sum reductions)
+  if (m.loanType === 'IO') return m.currentBalance
+
+  const r = m.interestRate / 100 / periodsPerYear
+  const n = m.termYears * periodsPerYear
+
   if (elapsed >= n) return 0
 
   let balance: number
