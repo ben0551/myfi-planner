@@ -1,5 +1,6 @@
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { amortizedBalance, type MortgageSnapshot } from '@/lib/mortgage'
 
 export async function GET() {
   const session = await auth()
@@ -354,81 +355,6 @@ export async function GET() {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-type MortgageSnapshot = {
-  originalAmount: number
-  currentBalance: number
-  interestRate: number
-  loanType: string
-  repaymentFreq: string
-  startDate: Date
-  termYears: number
-}
-
-/**
- * Estimates the amortized mortgage balance at a given date.
- * For P&I loans uses the standard amortization formula.
- * For IO loans the balance is flat (principal never reduces).
- * Clamps to [0, originalAmount].
- */
-/**
- * Estimates the mortgage balance at `atDate`.
- *
- * Anchors to `currentBalance` at today, then:
- *   - Past dates  → project backward:  B(T−k) = (currentBalance + PMT·((1+r)^k−1)/r) / (1+r)^k
- *   - Future dates → project forward:  B(T+j) = currentBalance·(1+r)^j − PMT·((1+r)^j−1)/r
- *
- * This means extra payments are implicitly reflected (they've already lowered currentBalance),
- * and the chart always passes through the actual current balance. Rate changes and payment
- * history are not tracked individually — this remains an estimate, not an accounting ledger.
- */
-function amortizedBalance(m: MortgageSnapshot, atDate: Date): number {
-  const periodsPerYear = m.repaymentFreq === 'WEEKLY' ? 52
-    : m.repaymentFreq === 'FORTNIGHTLY' ? 26
-    : 12
-
-  const startMs  = m.startDate.getTime()
-  const atMs     = atDate.getTime()
-  const elapsed  = ((atMs - startMs) / (365.25 * 24 * 3600 * 1000)) * periodsPerYear
-
-  if (elapsed < 0) return 0
-  if (m.loanType === 'IO') return m.currentBalance
-
-  const n = m.termYears * periodsPerYear
-  if (elapsed >= n) return 0
-
-  const r = m.interestRate / 100 / periodsPerYear
-
-  // PMT derived from original contract terms (the scheduled repayment amount)
-  if (r === 0) {
-    // Zero-rate: linear paydown; scale from currentBalance anchored to today
-    const todayElapsed0 = ((Date.now() - startMs) / (365.25 * 24 * 3600 * 1000)) * periodsPerYear
-    const remainingPeriods = Math.max(1, n - todayElapsed0)
-    const pmt0 = m.currentBalance / remainingPeriods
-    return Math.max(0, Math.min(m.originalAmount, m.currentBalance + pmt0 * (todayElapsed0 - elapsed)))
-  }
-
-  const pmt = (m.originalAmount * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1)
-
-  // Periods between the requested date and today (negative = date is in the past)
-  const todayElapsed = ((Date.now() - startMs) / (365.25 * 24 * 3600 * 1000)) * periodsPerYear
-  const periodsFromToday = elapsed - todayElapsed
-
-  let balance: number
-  if (periodsFromToday <= 0) {
-    // Past (or today): invert the amortization formula anchored to currentBalance
-    // B(T−k) = (currentBalance + PMT·((1+r)^k − 1)/r) / (1+r)^k
-    const k      = -periodsFromToday
-    const factor = Math.pow(1 + r, k)
-    balance = (m.currentBalance + pmt * (factor - 1) / r) / factor
-  } else {
-    // Future: project forward from currentBalance
-    const factor = Math.pow(1 + r, periodsFromToday)
-    balance = m.currentBalance * factor - pmt * (factor - 1) / r
-  }
-
-  return Math.max(0, Math.min(m.originalAmount, balance))
-}
 
 function toDateStr(d: Date): string {
   return d.toISOString().slice(0, 10)
