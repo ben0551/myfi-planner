@@ -1,4 +1,5 @@
 import { prisma } from './prisma'
+import { decrypt } from './crypto'
 
 const FMP_BASE = 'https://financialmodelingprep.com/api/v3'
 
@@ -9,7 +10,7 @@ function fmpSymbol(ticker: string): string {
 
 async function getApiKey(): Promise<string | null> {
   const settings = await prisma.siteSettings.findUnique({ where: { id: 1 } })
-  return settings?.fmpApiKey ?? null
+  return decrypt(settings?.fmpApiKey ?? null)
 }
 
 async function fmpFetch<T>(path: string, apiKey: string): Promise<T | null> {

@@ -5,6 +5,7 @@ import { getCachedAsxQuotes } from '@/lib/asx/cache'
 import { computePortfolioPerformance } from '@/lib/calculations'
 import { computeNetWorth } from '@/lib/wealth'
 import { streamChat, type AIConfig, type Provider } from '@/lib/ai/provider'
+import { decrypt } from '@/lib/crypto'
 
 async function buildContext(userId: string): Promise<string> {
   const [portfolios, properties, superAccounts, cashAccounts, fireSettings] = await Promise.all([
@@ -103,12 +104,12 @@ export async function POST(req: NextRequest) {
     messages: { role: 'user' | 'assistant'; content: string }[]
   }
 
-  // Load AI config from DB, fall back to env
+  // Load AI config from DB, fall back to env. Decrypt apiKey for outbound use.
   const aiSettings = await prisma.aISettings.findUnique({ where: { userId: session.user.id } })
   const config: AIConfig = {
     provider: (aiSettings?.provider as Provider) ?? 'anthropic',
     model: aiSettings?.model ?? null,
-    apiKey: aiSettings?.apiKey ?? null,
+    apiKey: decrypt(aiSettings?.apiKey ?? null),
     baseUrl: aiSettings?.baseUrl ?? null,
   }
 
