@@ -117,7 +117,7 @@ function InlineThemeControls() {
   return (
     <div className="px-3.5 py-2.5 border-t border-gray-100 dark:border-slate-700">
       <div className="flex items-center justify-between mb-2.5">
-        <span className="text-xs font-medium text-gray-400 dark:text-slate-500 uppercase tracking-wide">Appearance</span>
+        <span className="text-xs font-medium text-gray-400 dark:text-slate-500 uppercase tracking-wide">Dark Mode</span>
         <button
           onClick={() => setTheme(isDark ? 'light' : 'dark')}
           title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
