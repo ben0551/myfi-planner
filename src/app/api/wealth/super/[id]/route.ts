@@ -27,6 +27,8 @@ export async function PUT(
     currentBalance,
     employerContribPct,
     employeeContribPct,
+    annualSalary,
+    maxConcessional,
     currency,
     notes,
   } = body
@@ -42,6 +44,8 @@ export async function PUT(
       currentBalance,
       employerContribPct,
       employeeContribPct,
+      annualSalary: annualSalary ?? null,
+      maxConcessional: maxConcessional ?? false,
       currency,
       notes,
       ...(balanceChanged ? { balanceUpdatedAt: new Date() } : {}),

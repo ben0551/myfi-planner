@@ -385,6 +385,8 @@ model SuperAccount {
   currentBalance     Float
   employerContribPct Float                @default(11.5)
   employeeContribPct Float                @default(0)
+  annualSalary       Float?               // gross salary for contribution calculations
+  maxConcessional    Boolean              @default(false) // max out concessional cap ($30k FY25-26, $32.5k FY26-27+)
   currency           String               @default("AUD")
   notes              String?
   balanceUpdatedAt   DateTime             @default(now())

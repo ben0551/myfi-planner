@@ -24,6 +24,8 @@ export async function POST(request: NextRequest) {
     currentBalance,
     employerContribPct,
     employeeContribPct,
+    annualSalary,
+    maxConcessional,
     currency,
     notes,
   } = body
@@ -36,6 +38,8 @@ export async function POST(request: NextRequest) {
       currentBalance,
       employerContribPct,
       employeeContribPct,
+      annualSalary: annualSalary ?? null,
+      maxConcessional: maxConcessional ?? false,
       currency,
       notes,
       balanceUpdatedAt: new Date(),

@@ -43,24 +43,84 @@ export default async function SuperDetailPage({ params }: Props) {
       : null
 
   // Year-on-year: last recorded balance per calendar year → compare successive years
-  const balanceByYear = new Map<number, number>()
+  const entryByYear = new Map<number, { balance: number; date: Date }>()
   for (const h of sortedHistory) {
-    balanceByYear.set(h.date.getFullYear(), h.balance)
+    entryByYear.set(h.date.getFullYear(), { balance: h.balance, date: h.date })
   }
-  const yoyYears = Array.from(balanceByYear.keys()).sort()
+
+  // FY label by ending year: July 2025–June 2026 → FY 2026
+  const { maxConcessional, annualSalary, employerContribPct, employeeContribPct } = account
+  function fyEndYear(date: Date): number {
+    return date.getMonth() >= 6 ? date.getFullYear() + 1 : date.getFullYear()
+  }
+  function concessionalCap(fyEnd: number): number {
+    if (fyEnd >= 2027) return 32500
+    if (fyEnd >= 2025) return 30000
+    return 27500
+  }
+  function estimateContributions(fromDate: Date, toDate: Date): number | null {
+    if (fromDate >= toDate) return null
+    if (maxConcessional) {
+      let total = 0
+      const fyFrom = fyEndYear(fromDate)
+      const fyTo = fyEndYear(toDate)
+      for (let fy = fyFrom; fy <= fyTo; fy++) {
+        const fyStartDate = new Date(fy - 1, 6, 1)
+        const fyEndDate = new Date(fy, 5, 30, 23, 59, 59, 999)
+        const overlapStart = fromDate > fyStartDate ? fromDate : fyStartDate
+        const overlapEnd = toDate < fyEndDate ? toDate : fyEndDate
+        if (overlapStart >= overlapEnd) continue
+        const fyDays = (fyEndDate.getTime() - fyStartDate.getTime()) / 86400000
+        const overlapDays = (overlapEnd.getTime() - overlapStart.getTime()) / 86400000
+        total += concessionalCap(fy) * (overlapDays / fyDays)
+      }
+      return total
+    } else if (annualSalary) {
+      const days = (toDate.getTime() - fromDate.getTime()) / 86400000
+      return annualSalary * (employerContribPct + employeeContribPct) / 100 * (days / 365.25)
+    }
+    return null
+  }
+
+  const yoyYears = Array.from(entryByYear.keys()).sort()
   const yoyData = yoyYears.map((year, i) => {
-    const balance = balanceByYear.get(year)!
-    const prevBalance = i > 0 ? (balanceByYear.get(yoyYears[i - 1]) ?? null) : null
+    const { balance, date: toDate } = entryByYear.get(year)!
+    const prevYear = i > 0 ? yoyYears[i - 1] : null
+    const prevEntry = prevYear !== null ? (entryByYear.get(prevYear) ?? null) : null
+    const growthAmount = prevEntry !== null ? balance - prevEntry.balance : null
+    const contributions = prevEntry !== null ? estimateContributions(prevEntry.date, toDate) : null
+    const investmentReturn = growthAmount !== null && contributions !== null
+      ? growthAmount - contributions
+      : null
+    const investmentReturnPct = investmentReturn !== null && prevEntry !== null && prevEntry.balance > 0
+      ? (investmentReturn / prevEntry.balance) * 100
+      : null
     return {
       year,
       balance,
-      growthAmount: prevBalance !== null ? balance - prevBalance : null,
-      growthPct:
-        prevBalance !== null && prevBalance > 0
-          ? ((balance - prevBalance) / prevBalance) * 100
-          : null,
+      growthAmount,
+      growthPct: prevEntry !== null && prevEntry.balance > 0
+        ? ((balance - prevEntry.balance) / prevEntry.balance) * 100
+        : null,
+      contributions,
+      investmentReturn,
+      investmentReturnPct,
     }
   }).reverse()
+
+  // Total investment return since first entry
+  const lastEntry = sortedHistory[sortedHistory.length - 1]
+  const totalContributions = firstEntry && lastEntry
+    ? estimateContributions(firstEntry.date, lastEntry.date)
+    : null
+  const totalInvestmentReturn = growthAmount !== null && totalContributions !== null
+    ? growthAmount - totalContributions
+    : null
+  const totalInvestmentReturnPct = totalInvestmentReturn !== null && firstEntry && firstEntry.balance > 0
+    ? (totalInvestmentReturn / firstEntry.balance) * 100
+    : null
+
+  const hasContribData = account.maxConcessional || Boolean(account.annualSalary)
 
   const historyForChart = account.balanceHistory.map((h) => ({
     date: h.date.toISOString().split('T')[0],
@@ -73,6 +133,8 @@ export default async function SuperDetailPage({ params }: Props) {
     currentBalance: account.currentBalance.toString(),
     employerContribPct: account.employerContribPct.toString(),
     employeeContribPct: account.employeeContribPct.toString(),
+    annualSalary: account.annualSalary?.toString() ?? '',
+    maxConcessional: account.maxConcessional,
     currency: account.currency,
     notes: account.notes ?? '',
   }
@@ -116,6 +178,19 @@ export default async function SuperDetailPage({ params }: Props) {
             )}
           </Card>
         )}
+        {totalInvestmentReturn !== null && (
+          <Card>
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Investment Return</p>
+            <p className={`text-xl font-bold mt-1 ${totalInvestmentReturn >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+              {totalInvestmentReturn >= 0 ? '+' : ''}{formatCurrency(totalInvestmentReturn, account.currency)}
+            </p>
+            {totalInvestmentReturnPct !== null && (
+              <p className="text-xs text-gray-400 mt-0.5">
+                {totalInvestmentReturnPct >= 0 ? '+' : ''}{totalInvestmentReturnPct.toFixed(1)}% excl. contributions
+              </p>
+            )}
+          </Card>
+        )}
         <Card>
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Employer SGC</p>
           <p className="text-xl font-bold text-gray-900 mt-1">{account.employerContribPct}%</p>
@@ -143,9 +218,12 @@ export default async function SuperDetailPage({ params }: Props) {
               <thead>
                 <tr className="border-b border-gray-100 dark:border-slate-700 text-xs text-gray-500 uppercase tracking-wide">
                   <th className="text-left pb-2 font-medium">Year</th>
-                  <th className="text-right pb-2 font-medium">Year-end Balance</th>
-                  <th className="text-right pb-2 font-medium">Growth ($)</th>
-                  <th className="text-right pb-2 font-medium">Growth (%)</th>
+                  <th className="text-right pb-2 font-medium">Balance</th>
+                  <th className="text-right pb-2 font-medium">Total Growth</th>
+                  {hasContribData && <th className="text-right pb-2 font-medium">Est. Contributions</th>}
+                  {hasContribData && <th className="text-right pb-2 font-medium">Investment Return</th>}
+                  {hasContribData && <th className="text-right pb-2 font-medium">Return (%)</th>}
+                  {!hasContribData && <th className="text-right pb-2 font-medium">Growth (%)</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 dark:divide-slate-700/50">
@@ -170,20 +248,54 @@ export default async function SuperDetailPage({ params }: Props) {
                           ? '—'
                           : `${row.growthAmount >= 0 ? '+' : ''}${formatCurrency(row.growthAmount, account.currency)}`}
                       </td>
-                      <td className={`py-2 text-right font-medium ${
-                        row.growthPct === null ? 'text-gray-400' :
-                        row.growthPct >= 0 ? 'text-emerald-600' : 'text-red-500'
-                      }`}>
-                        {row.growthPct === null
-                          ? '—'
-                          : `${row.growthPct >= 0 ? '+' : ''}${row.growthPct.toFixed(1)}%`}
-                      </td>
+                      {hasContribData && (
+                        <td className="py-2 text-right text-gray-500 dark:text-slate-400">
+                          {row.contributions === null
+                            ? '—'
+                            : formatCurrency(row.contributions, account.currency)}
+                        </td>
+                      )}
+                      {hasContribData && (
+                        <td className={`py-2 text-right font-medium ${
+                          row.investmentReturn === null ? 'text-gray-400' :
+                          row.investmentReturn >= 0 ? 'text-emerald-600' : 'text-red-500'
+                        }`}>
+                          {row.investmentReturn === null
+                            ? '—'
+                            : `${row.investmentReturn >= 0 ? '+' : ''}${formatCurrency(row.investmentReturn, account.currency)}`}
+                        </td>
+                      )}
+                      {hasContribData && (
+                        <td className={`py-2 text-right font-medium ${
+                          row.investmentReturnPct === null ? 'text-gray-400' :
+                          row.investmentReturnPct >= 0 ? 'text-emerald-600' : 'text-red-500'
+                        }`}>
+                          {row.investmentReturnPct === null
+                            ? '—'
+                            : `${row.investmentReturnPct >= 0 ? '+' : ''}${row.investmentReturnPct.toFixed(1)}%`}
+                        </td>
+                      )}
+                      {!hasContribData && (
+                        <td className={`py-2 text-right font-medium ${
+                          row.growthPct === null ? 'text-gray-400' :
+                          row.growthPct >= 0 ? 'text-emerald-600' : 'text-red-500'
+                        }`}>
+                          {row.growthPct === null
+                            ? '—'
+                            : `${row.growthPct >= 0 ? '+' : ''}${row.growthPct.toFixed(1)}%`}
+                        </td>
+                      )}
                     </tr>
                   )
                 })}
               </tbody>
             </table>
           </div>
+          {!hasContribData && (
+            <p className="mt-3 text-xs text-gray-400 dark:text-slate-500">
+              Add your annual salary or enable max concessional contributions in Edit Account Details to see investment return separated from contributions.
+            </p>
+          )}
         </Card>
       )}
 
