@@ -117,11 +117,14 @@ function InlineThemeControls() {
   return (
     <div className="px-3.5 py-2.5 border-t border-gray-100 dark:border-slate-700">
       <div className="flex items-center justify-between mb-2.5">
-        <span className="text-xs font-medium text-gray-400 dark:text-slate-500 uppercase tracking-wide">Dark Mode</span>
+        <span id="dark-mode-label" className="text-xs font-medium text-gray-400 dark:text-slate-500 uppercase tracking-wide">Dark Mode</span>
         <button
           onClick={() => setTheme(isDark ? 'light' : 'dark')}
+          role="switch"
+          aria-checked={isDark}
+          aria-labelledby="dark-mode-label"
           title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-          className="relative w-9 h-5 rounded-full transition-colors focus:outline-none"
+          className="relative w-9 h-5 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
           style={{ backgroundColor: isDark ? '#4f46e5' : '#d1d5db' }}
         >
           <span
@@ -130,13 +133,16 @@ function InlineThemeControls() {
           />
         </button>
       </div>
-      <div className="flex gap-1.5 flex-wrap">
+      <div role="radiogroup" aria-label="Colour theme" className="flex gap-1.5 flex-wrap">
         {themes.map((t) => (
           <button
             key={t.id}
             onClick={() => setThemeId(t.id)}
+            role="radio"
+            aria-checked={t.id === themeId}
+            aria-label={t.name}
             title={t.name}
-            className="w-5 h-5 rounded-full transition-transform hover:scale-110"
+            className="w-5 h-5 rounded-full transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus:outline-none"
             style={{
               backgroundColor: t.swatch,
               outline: t.id === themeId ? `2px solid ${t.swatch}` : '2px solid transparent',

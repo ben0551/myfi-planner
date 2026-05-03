@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/Input'
 import { LabelledCurrencyInput } from '@/components/ui/CurrencyInput'
 import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
+import { currentSgRate } from '@/lib/superRates'
 
 interface SuperValues {
   fundName: string
@@ -34,7 +35,7 @@ const defaults: SuperValues = {
   fundName: '',
   accountNumber: '',
   currentBalance: '',
-  employerContribPct: '11.5',
+  employerContribPct: currentSgRate().toString(),
   employeeContribPct: '0',
   annualSalary: '',
   maxConcessional: false,
@@ -153,7 +154,7 @@ export function SuperAccountForm({ accountId, initialValues }: Props) {
             min="0"
             max="100"
             step="0.1"
-            hint="Super guarantee rate (currently 11.5%)"
+            hint={`Super guarantee rate (currently ${currentSgRate()}%)`}
             value={values.employerContribPct}
             onChange={(e) => set('employerContribPct', e.target.value)}
           />
