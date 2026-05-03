@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(npx prisma *)",
+      "Bash(git commit -m 'rename Appearance to Dark Mode in account dropdown *)",
+      "Bash(git commit -m 'fix: dark mode toggle uses inline styles to avoid Tailwind dark: class conflict *)",
+      "Bash(dir /b \"d:\\\\ben\\\\Documents\\\\myfi-planner\")"
+    ]
+  }
+}
