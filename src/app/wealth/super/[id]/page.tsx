@@ -42,6 +42,26 @@ export default async function SuperDetailPage({ params }: Props) {
       ? ((account.currentBalance - firstEntry.balance) / firstEntry.balance) * 100
       : null
 
+  // Year-on-year: last recorded balance per calendar year → compare successive years
+  const balanceByYear = new Map<number, number>()
+  for (const h of sortedHistory) {
+    balanceByYear.set(h.date.getFullYear(), h.balance)
+  }
+  const yoyYears = Array.from(balanceByYear.keys()).sort()
+  const yoyData = yoyYears.map((year, i) => {
+    const balance = balanceByYear.get(year)!
+    const prevBalance = i > 0 ? (balanceByYear.get(yoyYears[i - 1]) ?? null) : null
+    return {
+      year,
+      balance,
+      growthAmount: prevBalance !== null ? balance - prevBalance : null,
+      growthPct:
+        prevBalance !== null && prevBalance > 0
+          ? ((balance - prevBalance) / prevBalance) * 100
+          : null,
+    }
+  }).reverse()
+
   const historyForChart = account.balanceHistory.map((h) => ({
     date: h.date.toISOString().split('T')[0],
     value: h.balance,
@@ -113,6 +133,59 @@ export default async function SuperDetailPage({ params }: Props) {
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Balance History</h2>
         <SuperBalanceChart history={historyForChart} currency={account.currency} />
       </Card>
+
+      {/* Year-on-Year Growth */}
+      {yoyData.length > 1 && (
+        <Card>
+          <h2 className="text-sm font-semibold text-gray-700 mb-3">Year-on-Year Growth</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 dark:border-slate-700 text-xs text-gray-500 uppercase tracking-wide">
+                  <th className="text-left pb-2 font-medium">Year</th>
+                  <th className="text-right pb-2 font-medium">Year-end Balance</th>
+                  <th className="text-right pb-2 font-medium">Growth ($)</th>
+                  <th className="text-right pb-2 font-medium">Growth (%)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50 dark:divide-slate-700/50">
+                {yoyData.map((row) => {
+                  const isCurrentYear = row.year === new Date().getFullYear()
+                  return (
+                    <tr key={row.year}>
+                      <td className="py-2 text-gray-700 dark:text-slate-300">
+                        {row.year}
+                        {isCurrentYear && (
+                          <span className="ml-1.5 text-xs text-gray-400">YTD</span>
+                        )}
+                      </td>
+                      <td className="py-2 text-right font-medium text-gray-900 dark:text-white">
+                        {formatCurrency(row.balance, account.currency)}
+                      </td>
+                      <td className={`py-2 text-right font-medium ${
+                        row.growthAmount === null ? 'text-gray-400' :
+                        row.growthAmount >= 0 ? 'text-emerald-600' : 'text-red-500'
+                      }`}>
+                        {row.growthAmount === null
+                          ? '—'
+                          : `${row.growthAmount >= 0 ? '+' : ''}${formatCurrency(row.growthAmount, account.currency)}`}
+                      </td>
+                      <td className={`py-2 text-right font-medium ${
+                        row.growthPct === null ? 'text-gray-400' :
+                        row.growthPct >= 0 ? 'text-emerald-600' : 'text-red-500'
+                      }`}>
+                        {row.growthPct === null
+                          ? '—'
+                          : `${row.growthPct >= 0 ? '+' : ''}${row.growthPct.toFixed(1)}%`}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       {/* Balance History Table */}
       {account.balanceHistory.length > 0 && (

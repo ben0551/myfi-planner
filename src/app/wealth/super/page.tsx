@@ -23,6 +23,19 @@ export default async function SuperPage() {
 
   const totalBalance = accounts.reduce((sum, a) => sum + a.currentBalance, 0)
 
+  // Most-recent year-on-year growth per account
+  function getRecentYoY(history: { date: Date; balance: number }[]) {
+    const byYear = new Map<number, number>()
+    for (const h of history) byYear.set(h.date.getFullYear(), h.balance)
+    const years = Array.from(byYear.keys()).sort()
+    if (years.length < 2) return null
+    const latest = byYear.get(years[years.length - 1])!
+    const prev   = byYear.get(years[years.length - 2])!
+    const growthAmount = latest - prev
+    const growthPct = prev > 0 ? ((latest - prev) / prev) * 100 : null
+    return { year: years[years.length - 1], growthAmount, growthPct }
+  }
+
   // Build a combined history across all accounts (sum balances on each date)
   const combinedMap = new Map<string, number>()
   for (const a of accounts) {
@@ -93,6 +106,21 @@ export default async function SuperPage() {
                     <p className="text-xs text-gray-400 mt-0.5">
                       Updated {formatDate(a.balanceUpdatedAt)}
                     </p>
+                    {(() => {
+                      const yoy = getRecentYoY(a.balanceHistory)
+                      if (!yoy) return null
+                      return (
+                        <p className={`text-sm font-medium mt-1 ${yoy.growthAmount >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                          {yoy.growthAmount >= 0 ? '+' : ''}{formatCurrency(yoy.growthAmount, a.currency)}
+                          {yoy.growthPct !== null && (
+                            <span className="text-xs ml-1 opacity-80">
+                              ({yoy.growthPct >= 0 ? '+' : ''}{yoy.growthPct.toFixed(1)}%)
+                            </span>
+                          )}
+                          <span className="text-xs text-gray-400 font-normal ml-1">{yoy.year}</span>
+                        </p>
+                      )
+                    })()}
                   </div>
                 </div>
                 {a.balanceHistory.length > 1 && (
