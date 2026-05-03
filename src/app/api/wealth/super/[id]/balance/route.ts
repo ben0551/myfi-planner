@@ -51,18 +51,31 @@ export async function POST(
 
   const recordDate = date ? new Date(date) : new Date()
 
-  // Upsert balance history entry + update currentBalance
-  const [entry] = await prisma.$transaction([
-    prisma.superBalanceHistory.upsert({
+  // Upsert balance history entry, then sync currentBalance to the most recent entry.
+  // Using a callback transaction so we can query the latest entry after the upsert.
+  const entry = await prisma.$transaction(async (db) => {
+    const created = await db.superBalanceHistory.upsert({
       where: { accountId_date: { accountId: id, date: recordDate } },
       create: { accountId: id, date: recordDate, balance },
       update: { balance },
-    }),
-    prisma.superAccount.update({
+    })
+
+    // Always keep currentBalance = the most recently dated entry (not necessarily this one)
+    const latest = await db.superBalanceHistory.findFirst({
+      where: { accountId: id },
+      orderBy: { date: 'desc' },
+    })
+
+    await db.superAccount.update({
       where: { id },
-      data: { currentBalance: balance, balanceUpdatedAt: recordDate },
-    }),
-  ])
+      data: {
+        currentBalance: latest?.balance ?? balance,
+        balanceUpdatedAt: latest?.date ?? recordDate,
+      },
+    })
+
+    return created
+  })
 
   return Response.json(entry, { status: 201 })
 }
