@@ -14,6 +14,7 @@ import {
   WealthSnapshot,
   FireInputs,
 } from '@/lib/wealth'
+import { calcTermDeposit } from '@/lib/termDeposit'
 import { FireSettingsForm } from '@/components/wealth/FireSettingsForm'
 import { FireProjectionChart } from '@/components/wealth/FireProjectionChart'
 
@@ -40,7 +41,7 @@ export default async function FirePage() {
       prisma.superAccount.findMany({ where: { userId } }),
       prisma.cashAccount.findMany({ where: { userId } }),
       prisma.fireSettings.findUnique({ where: { userId } }),
-      prisma.portfolio.findMany({ where: { userId }, select: { id: true, portfolioType: true } }),
+      prisma.portfolio.findMany({ where: { userId }, select: { id: true, portfolioType: true, tdPrincipal: true, tdRate: true, tdStartDate: true, tdMaturityDate: true } }),
       prisma.anticipatedInheritance.findMany({
         where: { userId, includeInFire: true },
         orderBy: { expectedYear: 'asc' },
@@ -58,32 +59,14 @@ export default async function FirePage() {
     if (!snapshotValueMap.has(s.portfolioId)) snapshotValueMap.set(s.portfolioId, s.value)
   }
 
-  // TD value: use BUY/SELL transactions so history starts at the TD's actual open date,
-  // not when the portfolio page was first visited (which is when snapshots are written).
-  const tdPortfolios = portfolios.filter((p) => p.portfolioType === 'TERM_DEPOSIT')
+  // TD current value: compute from principal + accrued simple interest using TD parameters
   let tdValue = 0
-  if (tdPortfolios.length > 0) {
-    const tdTxns = await prisma.transaction.findMany({
-      where: { portfolioId: { in: tdPortfolios.map((p) => p.id) }, type: { in: ['BUY', 'SELL'] } },
-      select: { portfolioId: true, type: true, quantity: true, price: true, amount: true },
-    })
-    const tdTxnMap = new Map<string, typeof tdTxns>()
-    for (const t of tdTxns) {
-      if (!tdTxnMap.has(t.portfolioId)) tdTxnMap.set(t.portfolioId, [])
-      tdTxnMap.get(t.portfolioId)!.push(t)
-    }
-    for (const p of tdPortfolios) {
-      const txns = tdTxnMap.get(p.id) ?? []
-      if (txns.length > 0) {
-        let invested = 0
-        for (const t of txns) {
-          const v = t.amount != null ? Number(t.amount) : Number(t.quantity) * Number(t.price)
-          invested = t.type === 'BUY' ? invested + v : Math.max(0, invested - v)
-        }
-        tdValue += invested
-      } else {
-        tdValue += snapshotValueMap.get(p.id) ?? 0
-      }
+  for (const p of portfolios) {
+    if (p.portfolioType !== 'TERM_DEPOSIT') continue
+    if (p.tdPrincipal && p.tdRate && p.tdStartDate && p.tdMaturityDate) {
+      tdValue += calcTermDeposit(p.tdPrincipal, p.tdRate, p.tdStartDate, p.tdMaturityDate).currentValue
+    } else {
+      tdValue += snapshotValueMap.get(p.id) ?? 0
     }
   }
 

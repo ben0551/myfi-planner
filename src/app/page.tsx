@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { Button } from '@/components/ui/Button'
 import { formatCurrency } from '@/lib/formatters'
 import { computeNetWorth, WealthSnapshot } from '@/lib/wealth'
+import { calcTermDeposit } from '@/lib/termDeposit'
 import { NetWorthHistoryChart } from '@/components/wealth/NetWorthHistoryChart'
 import { PortfolioCard } from '@/components/portfolio/PortfolioCard'
 import { recordNetWorthSnapshot } from '@/lib/netWorthSnapshot'
@@ -83,32 +84,15 @@ export default async function DashboardPage() {
     return p?.portfolioType !== 'TERM_DEPOSIT' ? s + snap.value : s
   }, 0)
 
-  // TD value from BUY/SELL transactions (correct start date, not page-visit date)
-  const tdPortfolioIds2 = portfolios.filter((p) => p.portfolioType === 'TERM_DEPOSIT').map((p) => p.id)
+  // TD current value: compute from principal + accrued simple interest using TD parameters
   let tdValue = 0
-  if (tdPortfolioIds2.length > 0) {
-    const tdTxns = await prisma.transaction.findMany({
-      where: { portfolioId: { in: tdPortfolioIds2 }, type: { in: ['BUY', 'SELL'] } },
-      select: { portfolioId: true, type: true, quantity: true, price: true, amount: true },
-    })
-    const tdTxnMap = new Map<string, typeof tdTxns>()
-    for (const t of tdTxns) {
-      if (!tdTxnMap.has(t.portfolioId)) tdTxnMap.set(t.portfolioId, [])
-      tdTxnMap.get(t.portfolioId)!.push(t)
-    }
-    for (const pid of tdPortfolioIds2) {
-      const txns = tdTxnMap.get(pid) ?? []
-      if (txns.length > 0) {
-        let invested = 0
-        for (const t of txns) {
-          const v = t.amount != null ? Number(t.amount) : Number(t.quantity) * Number(t.price)
-          invested = t.type === 'BUY' ? invested + v : Math.max(0, invested - v)
-        }
-        tdValue += invested
-      } else {
-        const snap = latestSnapshots.find((s) => s.portfolioId === pid)
-        tdValue += snap?.value ?? 0
-      }
+  for (const p of portfolios) {
+    if (p.portfolioType !== 'TERM_DEPOSIT') continue
+    if (p.tdPrincipal && p.tdRate && p.tdStartDate && p.tdMaturityDate) {
+      tdValue += calcTermDeposit(p.tdPrincipal, p.tdRate, p.tdStartDate, p.tdMaturityDate).currentValue
+    } else {
+      const snap = latestSnapshots.find((s) => s.portfolioId === p.id)
+      tdValue += snap?.value ?? 0
     }
   }
 

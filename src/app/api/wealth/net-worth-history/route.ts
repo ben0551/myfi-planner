@@ -50,49 +50,60 @@ export async function GET() {
 
   // ── Build per-source histories as { date: string, value: number }[] ─────────
 
-  // TERM_DEPOSIT portfolios: always reconstruct from BUY/SELL transactions so the start
-  // date reflects when the TD was actually opened, not when the portfolio page was first visited.
-  // Snapshots are only used as a last resort when no transactions exist.
+  // TERM_DEPOSIT portfolios: compute history from the TD's own parameters (principal, rate,
+  // start/maturity dates). This gives correct history from tdStartDate regardless of whether
+  // the portfolio page has ever been visited. Monthly data points give smooth chart growth.
+  // Fallback to snapshots only when TD parameters are incomplete.
   type PortfolioHistory = { date: string; value: number }[]
   const tdHistories: PortfolioHistory[] = []
 
-  const tdPortfolioIds = portfolios
-    .filter((p) => p.portfolioType === 'TERM_DEPOSIT')
-    .map((p) => p.id)
+  for (const p of portfolios) {
+    if (p.portfolioType !== 'TERM_DEPOSIT') continue
 
-  if (tdPortfolioIds.length > 0) {
-    const tdTxns = await prisma.transaction.findMany({
-      where: { portfolioId: { in: tdPortfolioIds }, type: { in: ['BUY', 'SELL'] } },
-      orderBy: { date: 'asc' },
-      select: { portfolioId: true, type: true, date: true, quantity: true, price: true, amount: true },
-    })
-    const txnsByPortfolio = new Map<string, typeof tdTxns>()
-    for (const t of tdTxns) {
-      if (!txnsByPortfolio.has(t.portfolioId)) txnsByPortfolio.set(t.portfolioId, [])
-      txnsByPortfolio.get(t.portfolioId)!.push(t)
-    }
-    for (const pid of tdPortfolioIds) {
-      const txns = txnsByPortfolio.get(pid) ?? []
-      if (txns.length > 0) {
-        const hist: PortfolioHistory = []
-        let invested = 0
-        for (const t of txns) {
-          const v = t.amount != null ? Number(t.amount) : Number(t.quantity) * Number(t.price)
-          invested = t.type === 'BUY' ? invested + v : Math.max(0, invested - v)
-          hist.push({ date: toDateStr(t.date), value: invested })
-        }
-        tdHistories.push(hist)
-      } else {
-        // No transactions recorded — fall back to snapshots if any exist
-        const p = portfolios.find((p) => p.id === pid)!
-        if (p.snapshots.length > 0) {
-          tdHistories.push(
-            p.snapshots
-              .map((s) => ({ date: toDateStr(s.date), value: s.value }))
-              .sort((a, b) => a.date.localeCompare(b.date))
-          )
-        }
+    if (p.tdPrincipal && p.tdRate && p.tdStartDate && p.tdMaturityDate) {
+      const principal    = p.tdPrincipal
+      const rate         = p.tdRate / 100
+      const startDate    = p.tdStartDate
+      const maturityDate = p.tdMaturityDate
+      const today        = new Date()
+      const endDate      = today < maturityDate ? today : maturityDate
+
+      function tdValueAt(d: Date): number {
+        const days = Math.max(0, (d.getTime() - startDate.getTime()) / 86400000)
+        return principal + principal * rate * (days / 365)
       }
+
+      const hist: PortfolioHistory = [{ date: toDateStr(startDate), value: principal }]
+
+      // Monthly data points from start to end
+      const cur = new Date(startDate)
+      cur.setMonth(cur.getMonth() + 1)
+      while (cur <= endDate) {
+        hist.push({ date: toDateStr(cur), value: tdValueAt(cur) })
+        cur.setMonth(cur.getMonth() + 1)
+      }
+
+      // Ensure today/maturity endpoint is included
+      const endStr = toDateStr(endDate)
+      if (!hist.some((h) => h.date === endStr)) {
+        hist.push({ date: endStr, value: tdValueAt(endDate) })
+      }
+
+      // Deduplicate by date (keep last) and sort ascending
+      const byDate = new Map<string, number>()
+      for (const h of hist) byDate.set(h.date, h.value)
+      tdHistories.push(
+        Array.from(byDate.entries())
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([date, value]) => ({ date, value }))
+      )
+    } else if (p.snapshots.length > 0) {
+      // TD without full parameters: fall back to snapshots
+      tdHistories.push(
+        p.snapshots
+          .map((s) => ({ date: toDateStr(s.date), value: s.value }))
+          .sort((a, b) => a.date.localeCompare(b.date))
+      )
     }
   }
 
