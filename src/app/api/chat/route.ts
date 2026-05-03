@@ -71,9 +71,13 @@ ${perf.holdings.map((h) =>
   const propertyEquity = properties.reduce((s, p) => s + p.currentValue * (p.ownershipPct / 100) - (p.mortgage?.currentBalance ?? 0), 0)
   const superBalance = superAccounts.reduce((s, a) => s + a.currentBalance, 0)
   const cashBalance = cashAccounts.reduce((s, a) => s + a.balance, 0)
-  const latestSnapshots = await Promise.all(
-    portfolios.map((p) => prisma.portfolioSnapshot.findFirst({ where: { portfolioId: p.id }, orderBy: { date: 'desc' } }))
-  )
+  // Single findMany with distinct — replaces N+1 over portfolios
+  const latestSnapshots = await prisma.portfolioSnapshot.findMany({
+    where: { portfolioId: { in: portfolios.map((p) => p.id) } },
+    orderBy: { date: 'desc' },
+    distinct: ['portfolioId'],
+    select: { portfolioId: true, value: true },
+  })
   const sharesValue = latestSnapshots.reduce((s, snap) => s + (snap?.value ?? 0), 0)
   const nwSnap = { sharesValue, tdValue: 0, propertyEquity, superBalance, cashBalance, propertyDebt: 0, propertyGrossValue: 0 }
   const settings = fireSettings ?? { includePropertyEquity: true, includeSuper: true, includeCash: true }

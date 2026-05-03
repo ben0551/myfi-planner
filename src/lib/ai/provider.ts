@@ -69,10 +69,15 @@ async function* streamAnthropic(
   const { default: Anthropic } = await import('@anthropic-ai/sdk')
   const client = new Anthropic({ apiKey: key })
 
+  // Cache the system prompt — it's a static financial-data snapshot for the
+  // duration of a conversation, so subsequent turns within the 5-minute TTL
+  // pay ~10% of normal input cost. Worth it for any multi-turn chat.
   const response = await client.messages.stream({
     model,
     max_tokens: 1024,
-    system,
+    system: [
+      { type: 'text', text: system, cache_control: { type: 'ephemeral' } },
+    ],
     messages,
   })
 
