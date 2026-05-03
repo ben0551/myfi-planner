@@ -58,6 +58,7 @@ const OPENAI_COMPATIBLE: { value: string; label: string; url: string }[] = [
 
 export function AIProviderSettings({ onClose }: { onClose: () => void }) {
   const [config, setConfig] = useState<Config>({ provider: 'anthropic', model: '', apiKey: '', baseUrl: '' })
+  const [hasStoredKey, setHasStoredKey] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -65,7 +66,10 @@ export function AIProviderSettings({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     fetch('/api/ai-settings')
       .then((r) => r.json())
-      .then((d) => setConfig({ provider: d.provider ?? 'anthropic', model: d.model ?? '', apiKey: d.apiKey ?? '', baseUrl: d.baseUrl ?? '' }))
+      .then((d) => {
+        setConfig({ provider: d.provider ?? 'anthropic', model: d.model ?? '', apiKey: '', baseUrl: d.baseUrl ?? '' })
+        setHasStoredKey(Boolean(d.hasApiKey))
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -74,14 +78,25 @@ export function AIProviderSettings({ onClose }: { onClose: () => void }) {
   async function save() {
     setSaving(true)
     setSaved(false)
-    await fetch('/api/ai-settings', {
+    // If user left apiKey blank but a key is stored, omit it from the payload
+    // so the server keeps the existing one.
+    const payload = config.apiKey
+      ? config
+      : { provider: config.provider, model: config.model, baseUrl: config.baseUrl }
+    const res = await fetch('/api/ai-settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config),
+      body: JSON.stringify(payload),
     })
     setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    if (res.ok) {
+      const d = await res.json()
+      setHasStoredKey(Boolean(d.hasApiKey))
+      // Wipe the key field after a successful save
+      setConfig((c) => ({ ...c, apiKey: '' }))
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    }
   }
 
   if (loading) return <div className="p-4 text-sm text-gray-500">Loading…</div>
@@ -154,12 +169,17 @@ export function AIProviderSettings({ onClose }: { onClose: () => void }) {
           <label className="block text-xs font-medium text-gray-600 mb-1">{providerDef.keyLabel}</label>
           <input
             type="password"
-            placeholder="sk-..."
+            placeholder={hasStoredKey ? 'Key stored — type to replace' : 'sk-...'}
             value={config.apiKey}
             onChange={(e) => setConfig((c) => ({ ...c, apiKey: e.target.value }))}
+            autoComplete="off"
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
-          <p className="text-xs text-gray-400 mt-1">Stored locally in your database. Never sent anywhere except the provider.</p>
+          <p className="text-xs text-gray-400 mt-1">
+            {hasStoredKey
+              ? 'Key is stored encrypted. Leave blank to keep, or type a new key to replace.'
+              : 'Stored encrypted in your database. Never sent anywhere except the provider.'}
+          </p>
         </div>
       )}
 

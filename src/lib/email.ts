@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer'
 import { prisma } from './prisma'
+import { decrypt } from './crypto'
 
 export async function sendEmail({ to, subject, html }: { to: string; subject: string; html: string }) {
   const settings = await prisma.siteSettings.findUnique({ where: { id: 1 } })
@@ -7,12 +8,13 @@ export async function sendEmail({ to, subject, html }: { to: string; subject: st
     throw new Error('SMTP not configured')
   }
 
+  const smtpPass = decrypt(settings.smtpPass)
   const transporter = nodemailer.createTransport({
     host: settings.smtpHost,
     port: settings.smtpPort ?? 587,
     secure: settings.smtpPort === 465,
-    auth: settings.smtpUser && settings.smtpPass
-      ? { user: settings.smtpUser, pass: settings.smtpPass }
+    auth: settings.smtpUser && smtpPass
+      ? { user: settings.smtpUser, pass: smtpPass }
       : undefined,
   })
 

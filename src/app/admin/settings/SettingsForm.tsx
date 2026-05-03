@@ -2,9 +2,10 @@
 
 import { useState } from 'react'
 
-export function SettingsForm({ requireApproval: initial, fmpApiKey: initialKey }: { requireApproval: boolean; fmpApiKey: string }) {
+export function SettingsForm({ requireApproval: initial, hasFmpApiKey: initialHasKey }: { requireApproval: boolean; hasFmpApiKey: boolean }) {
   const [requireApproval, setRequireApproval] = useState(initial)
-  const [fmpApiKey, setFmpApiKey] = useState(initialKey)
+  const [fmpApiKey, setFmpApiKey] = useState('')
+  const [keyStored, setKeyStored] = useState(initialHasKey)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -32,7 +33,11 @@ export function SettingsForm({ requireApproval: initial, fmpApiKey: initialKey }
 
   async function handleSaveKey(e: React.FormEvent) {
     e.preventDefault()
-    await patch({ fmpApiKey })
+    if (!fmpApiKey) return // empty input keeps existing value
+    if (await patch({ fmpApiKey })) {
+      setKeyStored(true)
+      setFmpApiKey('') // clear input so it can't be read off the page
+    }
   }
 
   return (
@@ -88,7 +93,8 @@ export function SettingsForm({ requireApproval: initial, fmpApiKey: initialKey }
               type={showKey ? 'text' : 'password'}
               value={fmpApiKey}
               onChange={(e) => setFmpApiKey(e.target.value)}
-              placeholder="Enter API key…"
+              placeholder={keyStored ? 'Key stored — type to replace' : 'Enter API key…'}
+              autoComplete="off"
               className="w-full rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 px-3 py-2 text-sm pr-16 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             <button
@@ -107,9 +113,9 @@ export function SettingsForm({ requireApproval: initial, fmpApiKey: initialKey }
             Save
           </button>
         </form>
-        {fmpApiKey && (
+        {keyStored && !fmpApiKey && (
           <p className="mt-2 text-xs text-gray-400">
-            Key stored: {fmpApiKey.slice(0, 4)}{'•'.repeat(Math.max(0, fmpApiKey.length - 8))}{fmpApiKey.slice(-4)}
+            Key is stored (encrypted). Leave blank to keep, or type a new key to replace.
           </p>
         )}
       </div>
