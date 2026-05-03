@@ -461,7 +461,7 @@ model AnticipatedInheritance {
   name         String
   amount       Float
   expectedYear Int                        // calendar year expected to receive
-  probability  Int      @default(100)     // 0–100; scales effective amount
+  probability  Float    @default(100)     // 0–100; scales effective amount
   currency     String   @default("AUD")
   notes        String?
   includeInFire Boolean @default(true)
@@ -505,14 +505,13 @@ model Household {
 model HouseholdMember {
   id          String    @id @default(cuid())
   householdId String
-  userId      String
+  userId      String    @unique  // one household per user (app-level invariant)
   role        String    @default("MEMBER") // OWNER | MEMBER
   joinedAt    DateTime  @default(now())
   household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([householdId, userId])
-  @@index([userId])
+  @@index([householdId])
 }
 
 // ── Watchlist ─────────────────────────────────────────────────────────────────
