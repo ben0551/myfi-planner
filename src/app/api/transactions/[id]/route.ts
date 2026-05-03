@@ -1,13 +1,16 @@
 import { NextRequest } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { prisma, prismaRaw } from '@/lib/prisma'
 import { auth } from '@/lib/auth'
 
-async function getOwnedTransaction(id: string, userId: string) {
-  const tx = await prisma.transaction.findUnique({
+async function getOwnedTransaction(id: string, userId: string, includeDeleted = false) {
+  // Use prismaRaw when we may need to see deleted rows (for restore flow).
+  const client = includeDeleted ? prismaRaw : prisma
+  const tx = await client.transaction.findUnique({
     where: { id },
     include: { portfolio: { select: { userId: true } } },
   })
   if (!tx || tx.portfolio.userId !== userId) return null
+  if (!includeDeleted && tx.deletedAt) return null
   return tx
 }
 
@@ -55,17 +58,60 @@ export async function PUT(
   return Response.json(tx)
 }
 
+/**
+ * Soft-delete by default. Pass ?hard=true to permanently remove.
+ * Soft-deleted rows are excluded from all reads via the deletedAt filter
+ * but can be restored via POST { restore: true }.
+ */
 export async function DELETE(
-  _req: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth()
   if (!session) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params
-  const owned = await getOwnedTransaction(id, session.user.id)
+  const url = new URL(request.url)
+  const hard = url.searchParams.get('hard') === 'true'
+
+  const owned = await getOwnedTransaction(id, session.user.id, /* includeDeleted */ hard)
   if (!owned) return Response.json({ error: 'Not found' }, { status: 404 })
 
-  await prisma.transaction.delete({ where: { id } })
+  if (hard) {
+    await prismaRaw.transaction.delete({ where: { id } })
+  } else {
+    await prisma.transaction.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    })
+  }
   return new Response(null, { status: 204 })
+}
+
+/** POST { restore: true } — undoes a soft-delete. */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth()
+  if (!session) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id } = await params
+  const body = await request.json().catch(() => ({}))
+
+  if (body?.restore !== true) {
+    return Response.json({ error: 'Unsupported action' }, { status: 400 })
+  }
+
+  const owned = await getOwnedTransaction(id, session.user.id, /* includeDeleted */ true)
+  if (!owned) return Response.json({ error: 'Not found' }, { status: 404 })
+  if (!owned.deletedAt) {
+    return Response.json({ error: 'Not deleted' }, { status: 400 })
+  }
+
+  const tx = await prismaRaw.transaction.update({
+    where: { id },
+    data: { deletedAt: null },
+  })
+  return Response.json(tx)
 }
