@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/lib/auth'
+import { CreatePropertySchema, parseBody } from '@/lib/schemas'
 
 export async function GET() {
   const session = await auth()
@@ -47,46 +48,37 @@ export async function POST(request: NextRequest) {
   const session = await auth()
   if (!session) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await request.json()
-  const {
-    name,
-    address,
-    type,
-    purchasePrice,
-    purchaseDate,
-    currentValue,
-    ownershipPct,
-    currency,
-    notes,
-  } = body
+  const result = await parseBody(request, CreatePropertySchema)
+  if (!result.ok) return result.response
+  const data = result.data
 
   const property = await prisma.property.create({
     data: {
       userId: session.user.id,
-      name,
-      address,
-      type,
-      purchasePrice,
-      purchaseDate: new Date(purchaseDate),
-      currentValue,
-      ownershipPct,
-      currency,
-      notes,
+      name: data.name,
+      address: data.address ?? null,
+      type: data.type,
+      purchasePrice: data.purchasePrice,
+      purchaseDate: new Date(data.purchaseDate),
+      currentValue: data.currentValue,
+      ownershipPct: data.ownershipPct,
+      currency: data.currency,
+      notes: data.notes ?? null,
     },
     include: { mortgage: true },
   })
 
   // Record initial value history entries
-  const purchaseDateObj = new Date(purchaseDate)
+  const purchaseDateObj = new Date(data.purchaseDate)
   purchaseDateObj.setHours(0, 0, 0, 0)
   const historyEntries: { propertyId: string; date: Date; value: number }[] = [
-    { propertyId: property.id, date: purchaseDateObj, value: purchasePrice },
+    { propertyId: property.id, date: purchaseDateObj, value: data.purchasePrice },
   ]
   const todayMidnight = new Date()
   todayMidnight.setHours(0, 0, 0, 0)
   // Add today's value if different from purchase price (i.e. already appreciated/depreciated)
-  if (currentValue !== purchasePrice && purchaseDateObj < todayMidnight) {
-    historyEntries.push({ propertyId: property.id, date: todayMidnight, value: currentValue })
+  if (data.currentValue !== data.purchasePrice && purchaseDateObj < todayMidnight) {
+    historyEntries.push({ propertyId: property.id, date: todayMidnight, value: data.currentValue })
   }
   await prisma.propertyValueHistory.createMany({ data: historyEntries, skipDuplicates: true })
 
