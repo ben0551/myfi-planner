@@ -4,9 +4,9 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useSession, signOut } from 'next-auth/react'
 import { useRef, useState, useEffect } from 'react'
+import { useTheme } from 'next-themes'
 import { NotificationBell } from '@/components/alerts/NotificationBell'
-import { ThemeToggle } from '@/components/ui/ThemeToggle'
-import { ThemePicker } from '@/components/ui/ThemePicker'
+import { useColorTheme } from '@/components/ui/ColorThemeProvider'
 
 // Invest: portfolio-facing pages
 const investItems = [
@@ -17,13 +17,13 @@ const investItems = [
   { href: '/transactions', label: 'Transactions', icon: '🔍' },
 ]
 
-// Money: wealth and budget pages
-const moneyItems = [
+// Money: wealth and budget pages (household added conditionally)
+const moneyItemsBase = [
   { href: '/wealth', label: 'Wealth', icon: '🏦' },
-  { href: '/household', label: 'Household', icon: '🏠' },
   { href: '/budget', label: 'Budget', icon: '📋' },
   { href: '/bank-import', label: 'Bank Import', icon: '📥' },
 ]
+const householdItem = { href: '/household', label: 'Household', icon: '🏠' }
 
 // Reports: cross-portfolio tax and performance reports
 const reportItems = [
@@ -34,15 +34,12 @@ const reportItems = [
   { href: '/tax', label: 'Tax Summary', icon: '🧾' },
 ]
 
-const allNavItems = [...investItems, ...moneyItems, ...reportItems]
-
 const leftItems = [
   { href: '/', label: 'Dashboard' },
 ]
 
 const rightItems = [
   { href: '/research', label: 'Research' },
-  { href: '/chat', label: 'AI' },
 ]
 
 function useClickOutside(ref: React.RefObject<HTMLElement | null>, onClose: () => void) {
@@ -55,7 +52,7 @@ function useClickOutside(ref: React.RefObject<HTMLElement | null>, onClose: () =
   }, [ref, onClose])
 }
 
-function NavDropdown({ label: defaultLabel, items, pathname }: {
+function NavDropdown({ label, items, pathname }: {
   label: string
   items: { href: string; label: string; icon: string }[]
   pathname: string
@@ -64,9 +61,7 @@ function NavDropdown({ label: defaultLabel, items, pathname }: {
   const ref = useRef<HTMLDivElement>(null)
   useClickOutside(ref, () => setOpen(false))
 
-  const active = items.find((i) => pathname.startsWith(i.href))
-  const isActive = !!active
-  const label = defaultLabel
+  const isActive = items.some((i) => pathname.startsWith(i.href))
 
   return (
     <div ref={ref} className="relative">
@@ -110,7 +105,51 @@ function NavDropdown({ label: defaultLabel, items, pathname }: {
   )
 }
 
-function UserDropdown({ session, isAdmin }: { session: { user: { name?: string | null; email?: string | null } }; isAdmin: boolean }) {
+function InlineThemeControls() {
+  const { resolvedTheme, setTheme } = useTheme()
+  const { themes, themeId, setThemeId } = useColorTheme()
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  if (!mounted) return null
+
+  const isDark = resolvedTheme === 'dark'
+
+  return (
+    <div className="px-3.5 py-2.5 border-t border-gray-100 dark:border-slate-700">
+      <div className="flex items-center justify-between mb-2.5">
+        <span className="text-xs font-medium text-gray-400 dark:text-slate-500 uppercase tracking-wide">Appearance</span>
+        <button
+          onClick={() => setTheme(isDark ? 'light' : 'dark')}
+          title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+          className={`relative w-9 h-5 rounded-full transition-colors ${isDark ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-slate-600'}`}
+        >
+          <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${isDark ? 'translate-x-4' : 'translate-x-0.5'}`} />
+        </button>
+      </div>
+      <div className="flex gap-1.5 flex-wrap">
+        {themes.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setThemeId(t.id)}
+            title={t.name}
+            className="w-5 h-5 rounded-full transition-transform hover:scale-110"
+            style={{
+              backgroundColor: t.swatch,
+              outline: t.id === themeId ? `2px solid ${t.swatch}` : '2px solid transparent',
+              outlineOffset: '2px',
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function UserDropdown({ session, isAdmin, hasHousehold }: {
+  session: { user: { name?: string | null; email?: string | null } }
+  isAdmin: boolean
+  hasHousehold: boolean
+}) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useClickOutside(ref, () => setOpen(false))
@@ -129,7 +168,7 @@ function UserDropdown({ session, isAdmin }: { session: { user: { name?: string |
       </button>
 
       {open && (
-        <div className="absolute right-0 top-10 w-52 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-lg py-1.5 z-50">
+        <div className="absolute right-0 top-10 w-56 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-lg py-1.5 z-50">
           {/* User info header */}
           <div className="px-3.5 py-2.5 border-b border-gray-100 dark:border-slate-700">
             <p className="text-sm font-medium text-gray-900 dark:text-slate-100 truncate">{displayName}</p>
@@ -160,6 +199,19 @@ function UserDropdown({ session, isAdmin }: { session: { user: { name?: string |
               Alerts
             </Link>
 
+            {!hasHousehold && (
+              <Link
+                href="/household"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2.5 px-3.5 py-2 text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
+              >
+                <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+                Household
+              </Link>
+            )}
+
             {isAdmin && (
               <Link
                 href="/admin/users"
@@ -174,6 +226,9 @@ function UserDropdown({ session, isAdmin }: { session: { user: { name?: string |
               </Link>
             )}
           </div>
+
+          {/* Theme controls */}
+          <InlineThemeControls />
 
           <div className="border-t border-gray-100 dark:border-slate-700 pt-1">
             <button
@@ -192,21 +247,36 @@ function UserDropdown({ session, isAdmin }: { session: { user: { name?: string |
   )
 }
 
-function MobileMenu({ pathname }: { pathname: string }) {
+function MobileMenu({ pathname, hasHousehold }: { pathname: string; hasHousehold: boolean }) {
   const [open, setOpen] = useState(false)
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   useClickOutside(ref, () => setOpen(false))
 
-  const allItems = [
-    ...leftItems.map((i) => ({ ...i, icon: '' })),
-    ...allNavItems,
-    ...rightItems.map((i) => ({ ...i, icon: '' })),
+  const moneyItems = hasHousehold
+    ? [householdItem, ...moneyItemsBase]
+    : moneyItemsBase
+
+  const groups = [
+    { label: 'Invest', items: investItems },
+    { label: 'Money', items: moneyItems },
+    { label: 'Reports', items: reportItems },
   ]
+
+  function handleOpen() {
+    const next = !open
+    setOpen(next)
+    if (next) {
+      // auto-expand the group containing the current page
+      const active = groups.find((g) => g.items.some((i) => pathname.startsWith(i.href)))
+      setExpandedGroup(active?.label ?? null)
+    }
+  }
 
   return (
     <div ref={ref} className="md:hidden relative">
       <button
-        onClick={() => setOpen((o) => !o)}
+        onClick={handleOpen}
         className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
         aria-label="Menu"
       >
@@ -222,35 +292,113 @@ function MobileMenu({ pathname }: { pathname: string }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-11 w-56 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-xl py-1.5 z-50">
-          {allItems.map((item) => {
-            const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href)
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setOpen(false)}
-                className={`flex items-center gap-2.5 px-3.5 py-2.5 text-sm transition-colors ${
-                  active
-                    ? 'text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40'
-                    : 'text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700/50'
-                }`}
-              >
-                {item.icon && <span className="text-base">{item.icon}</span>}
-                {item.label}
-              </Link>
-            )
-          })}
+        <div className="absolute right-0 top-11 w-60 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden max-h-[80vh] overflow-y-auto">
+          {/* Dashboard */}
+          <div className="py-1">
+            {leftItems.map((item) => {
+              const active = pathname === item.href
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setOpen(false)}
+                  className={`flex items-center px-3.5 py-2.5 text-sm font-medium transition-colors ${
+                    active
+                      ? 'text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40'
+                      : 'text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700/50'
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              )
+            })}
+          </div>
+
+          <div className="border-t border-gray-100 dark:border-slate-700">
+            {groups.map((group) => {
+              const isExpanded = expandedGroup === group.label
+              const isGroupActive = group.items.some((i) => pathname.startsWith(i.href))
+
+              return (
+                <div key={group.label}>
+                  <button
+                    onClick={() => setExpandedGroup(isExpanded ? null : group.label)}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 text-sm font-medium transition-colors ${
+                      isGroupActive && !isExpanded
+                        ? 'text-indigo-700 dark:text-indigo-300 bg-indigo-50/60 dark:bg-indigo-950/30'
+                        : 'text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700/50'
+                    }`}
+                  >
+                    <span>{group.label}</span>
+                    <svg
+                      className={`w-3.5 h-3.5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {isExpanded && (
+                    <div className="bg-gray-50 dark:bg-slate-700/30 border-t border-b border-gray-100 dark:border-slate-700/50">
+                      {group.items.map((item) => {
+                        const active = pathname.startsWith(item.href)
+                        return (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            onClick={() => setOpen(false)}
+                            className={`flex items-center gap-2.5 pl-6 pr-3.5 py-2.5 text-sm transition-colors ${
+                              active
+                                ? 'text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40'
+                                : 'text-gray-600 dark:text-slate-400 hover:bg-gray-100/70 dark:hover:bg-slate-700/50'
+                            }`}
+                          >
+                            <span className="text-base">{item.icon}</span>
+                            {item.label}
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Research */}
+          <div className="border-t border-gray-100 dark:border-slate-700 py-1">
+            {rightItems.map((item) => {
+              const active = pathname.startsWith(item.href)
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setOpen(false)}
+                  className={`flex items-center px-3.5 py-2.5 text-sm font-medium transition-colors ${
+                    active
+                      ? 'text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40'
+                      : 'text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700/50'
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              )
+            })}
+          </div>
         </div>
       )}
     </div>
   )
 }
 
-export function Navbar() {
+export function Navbar({ hasHousehold }: { hasHousehold: boolean }) {
   const pathname = usePathname()
   const { data: session } = useSession()
   const isAdmin = session?.user?.role === 'ADMIN'
+
+  const moneyItems = hasHousehold
+    ? [householdItem, ...moneyItemsBase]
+    : moneyItemsBase
 
   return (
     <nav className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 sticky top-0 z-40">
@@ -303,15 +451,13 @@ export function Navbar() {
             </div>
           </div>
 
-          {/* Right: tools + user */}
+          {/* Right: bell + user + mobile hamburger */}
           <div className="flex items-center gap-1.5">
-            <ThemePicker />
-            <ThemeToggle />
             <NotificationBell />
             {session?.user && (
-              <UserDropdown session={session} isAdmin={isAdmin} />
+              <UserDropdown session={session} isAdmin={isAdmin} hasHousehold={hasHousehold} />
             )}
-            <MobileMenu pathname={pathname} />
+            <MobileMenu pathname={pathname} hasHousehold={hasHousehold} />
           </div>
 
         </div>
