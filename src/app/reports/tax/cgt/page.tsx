@@ -193,31 +193,33 @@ export default async function ReportsCGTPage({
         </Card>
       </div>
 
-      {/* CGT Harvesting Opportunities */}
-      {combinedNetAssessableGain > 0 && (
-        <Card padding={false}>
-          <div className="px-6 py-4 border-b border-gray-200 dark:border-slate-700">
-            <h2 className="font-semibold text-gray-900 dark:text-white">
-              CGT Harvesting Opportunities
-            </h2>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Positions with unrealised losses that could offset your{' '}
-              {formatCurrency(combinedNetAssessableGain, 'AUD')} assessable gain
-            </p>
-          </div>
-          <div className="p-6 space-y-4">
-            <p className="text-sm text-gray-600 dark:text-slate-400">
-              These positions have unrealised losses that could be crystallised to reduce your
-              assessable capital gain. Note: this analysis only covers tracked share portfolios
-              — other CGT events (property sales, crypto, etc.) may also affect your position.
-            </p>
+      {/* CGT Harvesting Opportunities — always show, even with no realised gains
+          (useful for planning before realisation events) */}
+      <Card padding={false}>
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-slate-700">
+          <h2 className="font-semibold text-gray-900 dark:text-white">
+            CGT Harvesting Opportunities
+          </h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {combinedNetAssessableGain > 0
+              ? <>Positions with unrealised losses that could offset your{' '}
+                  {formatCurrency(combinedNetAssessableGain, 'AUD')} assessable gain</>
+              : 'Positions with unrealised losses that could be crystallised to offset future gains'}
+          </p>
+        </div>
+        <div className="p-6 space-y-4">
+          <p className="text-sm text-gray-600 dark:text-slate-400">
+            These positions have unrealised losses that could be crystallised to reduce
+            your assessable capital gain. This analysis only covers tracked share portfolios
+            — other CGT events (property sales, crypto, etc.) may also affect your position.
+          </p>
 
-            {harvestCandidates.length === 0 ? (
-              <p className="text-sm text-gray-400 py-4 text-center">
-                No unrealised losses identified in current holdings.
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
+          {harvestCandidates.length === 0 ? (
+            <p className="text-sm text-gray-400 py-4 text-center">
+              No unrealised losses identified in current holdings.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-200 dark:border-slate-700 text-left text-xs text-gray-500 uppercase tracking-wide">
@@ -258,10 +260,9 @@ export default async function ReportsCGTPage({
                   </tbody>
                 </table>
               </div>
-            )}
-          </div>
-        </Card>
-      )}
+          )}
+        </div>
+      </Card>
 
       {/* Property Sales */}
       {propertyGainEvents.length > 0 && (

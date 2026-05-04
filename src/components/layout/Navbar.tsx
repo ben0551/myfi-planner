@@ -32,6 +32,7 @@ const reportItems = [
   { href: '/reports/tax/all-trades', label: 'All Trades', icon: '📋' },
   { href: '/reports/performance', label: 'Performance', icon: '📈' },
   { href: '/tax', label: 'Tax Summary', icon: '🧾' },
+  { href: '/tax/harvest', label: 'CGT Harvest', icon: '🌾' },
 ]
 
 const leftItems = [
