@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
           const rawProfile = fmp.profile as (typeof fmp.profile & { mktCap?: number }) | null
           const fmpMktCap = rawProfile?.mktCap ?? null
 
-          const companyName = fmp.profile?.companyName ?? yfProfile?.sector ?? null
+          const companyName = fmp.profile?.companyName ?? null
           const sector      = fmp.profile?.sector   || yfProfile?.sector   || null
           const industry    = fmp.profile?.industry || yfProfile?.industry || null
           const peRatio     = safeFloat(fmp.ratios?.peRatioTTM  ?? yfFund?.trailingPE)
@@ -142,7 +142,19 @@ export async function POST(req: NextRequest) {
           }
           await prisma.marketIndexSnapshot.upsert({
             where:  { ticker },
-            update: snapshotData,
+            // Use ?? undefined so existing non-null values are preserved when
+            // the current fetch returns no data for a field (prevents wiping).
+            update: {
+              fetchedAt:     snapshotData.fetchedAt,
+              companyName:   snapshotData.companyName   ?? undefined,
+              sector:        snapshotData.sector        ?? undefined,
+              industry:      snapshotData.industry      ?? undefined,
+              peRatio:       snapshotData.peRatio       ?? undefined,
+              eps:           snapshotData.eps           ?? undefined,
+              dividendYield: snapshotData.dividendYield ?? undefined,
+              marketCap:     snapshotData.marketCap     ?? undefined,
+              extras:        snapshotData.extras        ?? undefined,
+            },
             create: { ticker, ...snapshotData },
           })
           synced++

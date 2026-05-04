@@ -11,7 +11,7 @@ import { PerformanceSummary } from '@/components/portfolio/PerformanceSummary'
 import { AllocationChart } from '@/components/portfolio/AllocationChart'
 import { DividendsSection } from '@/components/portfolio/DividendsSection'
 import { PortfolioValueChart } from '@/components/portfolio/PortfolioValueChart'
-import { SyncDividendsButton } from '@/components/portfolio/SyncDividendsButton'
+import { PortfolioActionsMenu } from '@/components/portfolio/PortfolioActionsMenu'
 import { recordSnapshot } from '@/lib/snapshots'
 import { calcTermDeposit } from '@/lib/termDeposit'
 import { Card } from '@/components/ui/Card'
@@ -225,53 +225,12 @@ export default async function PortfolioPage({
         {portfolio.description && (
           <p className="text-sm text-gray-500">{portfolio.description}</p>
         )}
-        <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-          <div className="flex items-center gap-2 min-w-max">
-            <Link href={`/portfolios/${id}/transactions/new`}>
-              <Button size="sm">+ Add Transaction</Button>
-            </Link>
-            <Link href={`/portfolios/${id}/transactions/import`}>
-              <Button size="sm" variant="secondary">Import CSV</Button>
-            </Link>
-            <Link href={`/portfolios/${id}/transactions`}>
-              <Button size="sm" variant="secondary">History</Button>
-            </Link>
-            <Link href={`/portfolios/${id}/analysis`}>
-              <Button size="sm" variant="secondary">Analysis</Button>
-            </Link>
-            <Link href={`/portfolios/${id}/rebalance`}>
-              <Button size="sm" variant="secondary">Rebalance</Button>
-            </Link>
-            <Link href={`/portfolios/${id}/tax`}>
-              <Button size="sm" variant="secondary">Tax Report</Button>
-            </Link>
-            <Link href={`/portfolios/${id}/goals`}>
-              <Button size="sm" variant="secondary">Goals</Button>
-            </Link>
-            <a href={`/api/portfolios/${id}/export`} download>
-              <Button size="sm" variant="secondary">Export CSV</Button>
-            </a>
-            {pendingCount > 0 && (
-              <Link href={`/portfolios/${id}/inbox`}>
-                <Button size="sm" variant="secondary">
-                  Inbox <span className="ml-1 inline-flex items-center justify-center rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold w-5 h-5">{pendingCount}</span>
-                </Button>
-              </Link>
-            )}
-            <Link href={`/portfolios/${id}/edit`}>
-              <Button size="sm" variant="ghost">Edit</Button>
-            </Link>
-          </div>
-        </div>
+        <PortfolioActionsMenu
+          portfolioId={id}
+          pendingCount={pendingCount}
+          hasTransactions={transactions.length > 0}
+        />
       </div>
-
-      {/* Dividend sync */}
-      {transactions.length > 0 && (
-        <div className="flex items-center gap-2 -mt-2">
-          <span className="text-xs text-gray-400">Auto-sync dividends from Yahoo Finance:</span>
-          <SyncDividendsButton portfolioId={id} />
-        </div>
-      )}
 
       {transactions.length === 0 && (
         <Card>
