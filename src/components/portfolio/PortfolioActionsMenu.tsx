@@ -53,23 +53,24 @@ export function PortfolioActionsMenu({ portfolioId, pendingCount, hasTransaction
   ]
 
   return (
-    <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-      <div className="flex items-center gap-2 min-w-max">
-        {/* Primary */}
-        <Link href={`/portfolios/${portfolioId}/transactions/new`}>
-          <Button size="sm">+ Add Transaction</Button>
-        </Link>
-
-        {/* Nav links */}
-        {navLinks.map((l) => (
-          <Link key={l.href} href={l.href}>
-            <Button size="sm" variant="secondary">{l.label}</Button>
+    <div className="flex items-center gap-2">
+      {/* Scrollable: primary + nav links */}
+      <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 flex-1 min-w-0">
+        <div className="flex items-center gap-2 min-w-max">
+          <Link href={`/portfolios/${portfolioId}/transactions/new`}>
+            <Button size="sm">+ Add Transaction</Button>
           </Link>
-        ))}
+          {navLinks.map((l) => (
+            <Link key={l.href} href={l.href}>
+              <Button size="sm" variant="secondary">{l.label}</Button>
+            </Link>
+          ))}
+        </div>
+      </div>
 
-        {/* Actions dropdown */}
-        <div ref={ref} className="relative">
-          <Button size="sm" variant="secondary" onClick={() => setOpen((o) => !o)}>
+      {/* Actions dropdown — outside overflow container so panel isn't clipped */}
+      <div ref={ref} className="relative shrink-0">
+        <Button size="sm" variant="secondary" onClick={() => setOpen((o) => !o)}>
             Actions
             <svg className={`ml-1.5 w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
@@ -161,3 +162,4 @@ export function PortfolioActionsMenu({ portfolioId, pendingCount, hasTransaction
     </div>
   )
 }
+
