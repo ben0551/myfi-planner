@@ -30,31 +30,21 @@ export function CGTHarvestPanel({ fyYear }: Props) {
 
   const { positions, realisedNetAssessable, totalHarvestableLoss, maxOffsetAvailable, estimatedTaxSaving, currency, fyLabel } = data
 
-  if (realisedNetAssessable <= 0) {
-    return (
-      <Card>
-        <div className="flex items-start gap-3">
-          <span className="text-xl">✅</span>
-          <div>
-            <p className="font-medium text-gray-900 dark:text-white text-sm">No net assessable gains this {fyLabel}</p>
-            <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
-              You have no realised net capital gains to offset — tax-loss harvesting is not needed.
-            </p>
-          </div>
-        </div>
-      </Card>
-    )
-  }
-
   if (positions.length === 0) {
     return (
       <Card>
         <div className="flex items-start gap-3">
-          <span className="text-xl">📈</span>
+          <span className="text-xl">{realisedNetAssessable <= 0 ? '✅' : '📈'}</span>
           <div>
-            <p className="font-medium text-gray-900 dark:text-white text-sm">No harvestable losses found</p>
+            <p className="font-medium text-gray-900 dark:text-white text-sm">
+              {realisedNetAssessable <= 0
+                ? `No net assessable gains this ${fyLabel}`
+                : 'No harvestable losses found'}
+            </p>
             <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
-              All your current holdings are at a gain — no positions available to sell for a tax loss.
+              {realisedNetAssessable <= 0
+                ? 'You have no realised net capital gains to offset — tax-loss harvesting is not needed.'
+                : 'All your current holdings are at a gain — no positions available to sell for a tax loss.'}
             </p>
           </div>
         </div>
@@ -65,24 +55,44 @@ export function CGTHarvestPanel({ fyYear }: Props) {
   return (
     <div className="space-y-4">
       {/* Summary banner */}
-      <div className="rounded-xl border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-4">
-        <div className="flex items-start gap-3 flex-wrap">
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-amber-900 dark:text-amber-200 text-sm">
-              Potential tax saving: ~{formatCurrency(estimatedTaxSaving, currency)}
-            </p>
-            <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
-              You have {formatCurrency(realisedNetAssessable, currency)} in net assessable gains this {fyLabel}.
-              Selling the positions below would offset up to {formatCurrency(maxOffsetAvailable, currency)},
-              saving ~{formatCurrency(estimatedTaxSaving, currency)} at a 47% marginal rate.
-            </p>
-          </div>
-          <div className="text-right shrink-0">
-            <p className="text-xs text-amber-600 dark:text-amber-400">Total harvestable loss</p>
-            <p className="font-bold text-amber-900 dark:text-amber-200">{formatCurrency(-totalHarvestableLoss, currency)}</p>
+      {realisedNetAssessable > 0 ? (
+        <div className="rounded-xl border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-4">
+          <div className="flex items-start gap-3 flex-wrap">
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-amber-900 dark:text-amber-200 text-sm">
+                Potential tax saving: ~{formatCurrency(estimatedTaxSaving, currency)}
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                You have {formatCurrency(realisedNetAssessable, currency)} in net assessable gains this {fyLabel}.
+                Selling the positions below would offset up to {formatCurrency(maxOffsetAvailable, currency)},
+                saving ~{formatCurrency(estimatedTaxSaving, currency)} at a 47% marginal rate.
+              </p>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-xs text-amber-600 dark:text-amber-400">Total harvestable loss</p>
+              <p className="font-bold text-amber-900 dark:text-amber-200">{formatCurrency(-totalHarvestableLoss, currency)}</p>
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="rounded-xl border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30 p-4">
+          <div className="flex items-start gap-3 flex-wrap">
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-blue-900 dark:text-blue-200 text-sm">
+                No net gains this {fyLabel} — losses would carry forward
+              </p>
+              <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
+                You have no realised net capital gains to offset right now. Selling these positions would bank{' '}
+                {formatCurrency(-totalHarvestableLoss, currency)} in losses that carry forward to offset future years&apos; gains.
+              </p>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-xs text-blue-600 dark:text-blue-400">Total harvestable loss</p>
+              <p className="font-bold text-blue-900 dark:text-blue-200">{formatCurrency(-totalHarvestableLoss, currency)}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Positions table */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden">
