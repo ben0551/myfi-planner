@@ -22,6 +22,7 @@ const moneyItemsBase = [
   { href: '/wealth', label: 'Wealth', icon: '🏦' },
   { href: '/budget', label: 'Budget', icon: '📋' },
   { href: '/bank-import', label: 'Bank Import', icon: '📥' },
+  { href: '/email-import', label: 'Email Import', icon: '📧' },
 ]
 const householdItem = { href: '/household', label: 'Household', icon: '🏠' }
 
