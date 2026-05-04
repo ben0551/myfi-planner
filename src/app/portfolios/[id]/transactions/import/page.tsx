@@ -3,7 +3,12 @@
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useState, useRef } from 'react'
+import useSWR from 'swr'
 import { Button } from '@/components/ui/Button'
+import { PasteImport } from '@/components/email/PasteImport'
+import { EmlUpload } from '@/components/email/EmlUpload'
+import { ParsePreview } from '@/components/email/ParsePreview'
+import type { ParsedTransaction } from '@/lib/email/types'
 
 interface ParsedTx {
   type: string
@@ -166,12 +171,19 @@ function detectBroker(cleanedHeaders: string[]): BrokerKey {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+type Tab = 'csv' | 'paste' | 'upload'
+
+const fetcher = (url: string) => fetch(url).then((r) => r.json())
+
 export default function ImportTransactionsPage() {
   const params = useParams()
   const router = useRouter()
   const id = params.id as string
   const fileRef = useRef<HTMLInputElement>(null)
 
+  const [activeTab, setActiveTab] = useState<Tab>('csv')
+
+  // CSV state
   const [rawRows, setRawRows] = useState<Record<string, string>[]>([])
   const [broker, setBroker] = useState<BrokerKey>('native')
   const [autoDetected, setAutoDetected] = useState<BrokerKey | null>(null)
@@ -181,6 +193,34 @@ export default function ImportTransactionsPage() {
   const [done, setDone] = useState(false)
   const [fileError, setFileError] = useState<string | null>(null)
   const [fileName, setFileName] = useState<string | null>(null)
+
+  // Email state
+  const [parsed, setParsed] = useState<ParsedTransaction | null>(null)
+  const [rawText, setRawText] = useState('')
+  const [emailSaved, setEmailSaved] = useState(false)
+  const { data: portfolios = [] } = useSWR<{ id: string; name: string }[]>('/api/portfolios', fetcher)
+  // Put current portfolio first so ParsePreview defaults to it
+  const orderedPortfolios = [
+    ...portfolios.filter((p) => p.id === id),
+    ...portfolios.filter((p) => p.id !== id),
+  ]
+
+  function handleParsed(result: ParsedTransaction, raw: string) {
+    setParsed(result)
+    setRawText(raw)
+    setEmailSaved(false)
+  }
+
+  async function handleEmailSave(overrides: Record<string, unknown>) {
+    await fetch('/api/pending-transactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...overrides, source: activeTab === 'upload' ? 'eml_upload' : 'email_paste' }),
+    })
+    setParsed(null)
+    setRawText('')
+    setEmailSaved(true)
+  }
 
   async function handleFile(file: File) {
     setFileError(null)
@@ -283,6 +323,12 @@ export default function ImportTransactionsPage() {
     DIVIDEND: 'text-indigo-700 bg-indigo-50',
   }
 
+  const tabs: { key: Tab; label: string }[] = [
+    { key: 'csv',    label: 'CSV / Excel' },
+    { key: 'paste',  label: 'Paste Email' },
+    { key: 'upload', label: 'Upload .eml' },
+  ]
+
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
@@ -292,6 +338,94 @@ export default function ImportTransactionsPage() {
         </Link>
       </div>
 
+      {/* Tab bar */}
+      <div className="flex border-b border-gray-200 dark:border-slate-700">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => { setActiveTab(tab.key); setParsed(null); setEmailSaved(false) }}
+            className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === tab.key
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Email: Paste ── */}
+      {activeTab === 'paste' && (
+        <div className="space-y-6">
+          {!parsed && !emailSaved && <PasteImport onParsed={handleParsed} />}
+          {parsed && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-gray-900 dark:text-white">Parsed Transaction</h3>
+                <button onClick={() => setParsed(null)} className="text-sm text-gray-500 hover:text-gray-700 dark:text-slate-400">
+                  ← Back
+                </button>
+              </div>
+              <ParsePreview
+                parsed={parsed}
+                rawText={rawText}
+                portfolios={orderedPortfolios}
+                onSave={handleEmailSave as Parameters<typeof ParsePreview>[0]['onSave']}
+                onDiscard={() => setParsed(null)}
+              />
+            </div>
+          )}
+          {emailSaved && (
+            <div className="rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-6 text-center space-y-3">
+              <p className="text-green-800 dark:text-green-300 font-semibold">Transaction queued for review</p>
+              <p className="text-green-700 dark:text-green-400 text-sm">
+                <Link href={`/portfolios/${id}/inbox`} className="underline">Open Inbox</Link>
+                {' '}to confirm or reject it, or paste another email below.
+              </p>
+              <button onClick={() => setEmailSaved(false)} className="text-sm text-indigo-600 hover:text-indigo-800 dark:text-indigo-400">
+                Paste another email
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Email: Upload .eml ── */}
+      {activeTab === 'upload' && (
+        <div className="space-y-6">
+          {!parsed && !emailSaved && <EmlUpload onParsed={handleParsed} />}
+          {parsed && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-gray-900 dark:text-white">Parsed Transaction</h3>
+                <button onClick={() => setParsed(null)} className="text-sm text-gray-500 hover:text-gray-700 dark:text-slate-400">
+                  ← Back
+                </button>
+              </div>
+              <ParsePreview
+                parsed={parsed}
+                rawText={rawText}
+                portfolios={orderedPortfolios}
+                onSave={handleEmailSave as Parameters<typeof ParsePreview>[0]['onSave']}
+                onDiscard={() => setParsed(null)}
+              />
+            </div>
+          )}
+          {emailSaved && (
+            <div className="rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-6 text-center space-y-3">
+              <p className="text-green-800 dark:text-green-300 font-semibold">Transaction queued for review</p>
+              <p className="text-green-700 dark:text-green-400 text-sm">
+                <Link href={`/portfolios/${id}/inbox`} className="underline">Open Inbox</Link>
+                {' '}to confirm or reject it.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── CSV / Excel ── */}
+      {activeTab === 'csv' && <>
       {/* Format guide */}
       <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-5 text-sm space-y-3">
         <p className="font-semibold text-indigo-800">Supported formats</p>
@@ -447,6 +581,7 @@ export default function ImportTransactionsPage() {
           <p className="text-green-700 text-sm mt-1">Redirecting to transactions…</p>
         </div>
       )}
+      </>}
     </div>
   )
 }
