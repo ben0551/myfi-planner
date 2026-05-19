@@ -39,14 +39,30 @@ export async function PUT(
   const body = await request.json()
   const {
     name, description, currency,
-    tdPrincipal, tdRate, tdTermMonths, tdStartDate, tdInterestFreq,
+    tdPrincipal, tdRate, tdTermMonths, tdStartDate, tdMaturityDate: tdMaturityDateRaw, tdInterestFreq,
   } = body
 
   let tdMaturityDate: Date | undefined
-  if (owned.portfolioType === 'TERM_DEPOSIT' && tdStartDate && tdTermMonths) {
+  if (owned.portfolioType === 'TERM_DEPOSIT') {
+    if (tdMaturityDateRaw) {
+      // Direct end date provided
+      tdMaturityDate = new Date(tdMaturityDateRaw)
+    } else if (tdStartDate && tdTermMonths) {
+      // Derive from start + term
+      const start = new Date(tdStartDate)
+      start.setMonth(start.getMonth() + Number(tdTermMonths))
+      tdMaturityDate = start
+    }
+  }
+
+  // Recalculate term months from dates when end date is set directly
+  let resolvedTermMonths: number | undefined
+  if (owned.portfolioType === 'TERM_DEPOSIT' && tdStartDate && tdMaturityDate) {
     const start = new Date(tdStartDate)
-    start.setMonth(start.getMonth() + Number(tdTermMonths))
-    tdMaturityDate = start
+    const ms = tdMaturityDate.getTime() - start.getTime()
+    resolvedTermMonths = Math.round(ms / (1000 * 60 * 60 * 24 * 30.44))
+  } else if (tdTermMonths != null) {
+    resolvedTermMonths = Number(tdTermMonths)
   }
 
   const portfolio = await prisma.portfolio.update({
@@ -56,10 +72,10 @@ export async function PUT(
       ...(owned.portfolioType === 'TERM_DEPOSIT' ? {
         tdPrincipal:    tdPrincipal    != null ? Number(tdPrincipal)    : undefined,
         tdRate:         tdRate         != null ? Number(tdRate)         : undefined,
-        tdTermMonths:   tdTermMonths   != null ? Number(tdTermMonths)   : undefined,
+        tdTermMonths:   resolvedTermMonths                              ?? undefined,
         tdStartDate:    tdStartDate    ? new Date(tdStartDate)          : undefined,
-        tdMaturityDate: tdMaturityDate ?? undefined,
-        tdInterestFreq: tdInterestFreq ?? undefined,
+        tdMaturityDate: tdMaturityDate                                  ?? undefined,
+        tdInterestFreq: tdInterestFreq                                  ?? undefined,
       } : {}),
     },
   })

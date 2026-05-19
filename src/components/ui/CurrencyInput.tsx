@@ -79,9 +79,10 @@ interface LabelledProps {
   required?: boolean
   allowNegative?: boolean
   decimalScale?: number
+  disabled?: boolean
 }
 
-export function LabelledCurrencyInput({ label, hint, value, onChange, placeholder, required, allowNegative, decimalScale }: LabelledProps) {
+export function LabelledCurrencyInput({ label, hint, value, onChange, placeholder, required, allowNegative, decimalScale, disabled }: LabelledProps) {
   const id = label.toLowerCase().replace(/\s+/g, '-')
   return (
     <div className="space-y-1">
@@ -97,6 +98,7 @@ export function LabelledCurrencyInput({ label, hint, value, onChange, placeholde
         allowNegative={allowNegative ?? false}
         placeholder={placeholder ?? '0'}
         required={required}
+        disabled={disabled}
         className={inputClass}
       />
       {hint && <p className="text-xs text-gray-500 dark:text-slate-400">{hint}</p>}

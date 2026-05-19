@@ -41,42 +41,60 @@ export default async function PortfolioPage({
 
   // ── Term Deposit branch ────────────────────────────────────────────────────
   if (isTd) {
-    const td = portfolio.tdPrincipal && portfolio.tdRate && portfolio.tdStartDate && portfolio.tdMaturityDate
+    const isClosed = Boolean(portfolio.tdClosedAt)
+
+    // For a closed TD use the locked close value; otherwise calculate live
+    const td = !isClosed && portfolio.tdPrincipal && portfolio.tdRate && portfolio.tdStartDate && portfolio.tdMaturityDate
       ? calcTermDeposit(portfolio.tdPrincipal, portfolio.tdRate, portfolio.tdStartDate, portfolio.tdMaturityDate)
       : null
 
-    if (td) {
-      void recordSnapshot(portfolio.id, td.currentValue, portfolio.tdPrincipal!)
+    const displayValue = isClosed
+      ? (portfolio.tdClosedValue ?? portfolio.tdPrincipal ?? 0)
+      : (td?.currentValue ?? 0)
+
+    const displayInterest = isClosed
+      ? ((portfolio.tdClosedValue ?? 0) - (portfolio.tdPrincipal ?? 0))
+      : (td?.accruedInterest ?? 0)
+
+    if (displayValue > 0) {
+      void recordSnapshot(portfolio.id, displayValue, portfolio.tdPrincipal ?? 0)
     }
 
     const maturityDateStr = portfolio.tdMaturityDate?.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
     const startDateStr    = portfolio.tdStartDate?.toLocaleDateString('en-AU',    { day: 'numeric', month: 'short', year: 'numeric' })
+    const closedDateStr   = portfolio.tdClosedAt?.toLocaleDateString('en-AU',     { day: 'numeric', month: 'short', year: 'numeric' })
 
     return (
       <div className="space-y-6">
         <div className="flex items-start justify-between">
           <div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-2xl font-bold text-gray-900">{portfolio.name}</h1>
               <Badge variant="blue">{portfolio.currency}</Badge>
               <Badge variant="gray">Term Deposit</Badge>
-              {td?.isMatured && <Badge variant="green">Matured</Badge>}
+              {isClosed
+                ? <Badge variant="yellow">Closed</Badge>
+                : td?.isMatured && <Badge variant="green">Matured</Badge>}
             </div>
             {portfolio.description && (
               <p className="text-sm text-gray-500 mt-1">{portfolio.description}</p>
             )}
           </div>
           <div className="flex gap-2">
-            <Link href={`/portfolios/${id}/edit`}><Button size="sm" variant="ghost">Edit</Button></Link>
+            <Link href={`/portfolios/${id}/edit`}>
+              <Button size="sm" variant="ghost">{isClosed ? 'View' : 'Edit'}</Button>
+            </Link>
           </div>
         </div>
 
         {/* Key stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <Card>
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Current Value</p>
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+              {isClosed ? 'Final Value' : 'Current Value'}
+            </p>
             <p className="text-xl font-bold text-gray-900 mt-1">
-              {td ? fmtCcy(td.currentValue, portfolio.currency) : '—'}
+              {fmtCcy(displayValue, portfolio.currency)}
             </p>
           </Card>
           <Card>
@@ -86,17 +104,23 @@ export default async function PortfolioPage({
             </p>
           </Card>
           <Card>
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Accrued Interest</p>
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+              {isClosed ? 'Interest Earned' : 'Accrued Interest'}
+            </p>
             <p className="text-xl font-bold text-emerald-700 mt-1">
-              {td ? `+${fmtCcy(td.accruedInterest, portfolio.currency)}` : '—'}
+              {displayInterest > 0 ? `+${fmtCcy(displayInterest, portfolio.currency)}` : '—'}
             </p>
           </Card>
           <Card>
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total at Maturity</p>
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+              {isClosed ? 'Closed On' : 'Total at Maturity'}
+            </p>
             <p className="text-xl font-bold text-gray-900 mt-1">
-              {td && portfolio.tdPrincipal != null
-                ? fmtCcy(portfolio.tdPrincipal + td.totalInterest, portfolio.currency)
-                : '—'}
+              {isClosed
+                ? (closedDateStr ?? '—')
+                : td && portfolio.tdPrincipal != null
+                  ? fmtCcy(portfolio.tdPrincipal + td.totalInterest, portfolio.currency)
+                  : '—'}
             </p>
           </Card>
         </div>
@@ -127,10 +151,12 @@ export default async function PortfolioPage({
               <p className="font-semibold text-gray-900">{startDateStr ?? '—'}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">Maturity Date</p>
-              <p className="font-semibold text-gray-900">{maturityDateStr ?? '—'}</p>
+              <p className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">
+                {isClosed ? 'Closed Date' : 'Maturity Date'}
+              </p>
+              <p className="font-semibold text-gray-900">{isClosed ? closedDateStr : maturityDateStr ?? '—'}</p>
             </div>
-            {td && !td.isMatured && (
+            {!isClosed && td && !td.isMatured && (
               <div>
                 <p className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">Days Remaining</p>
                 <p className="font-semibold text-gray-900">{td.daysRemaining} days</p>
@@ -138,8 +164,8 @@ export default async function PortfolioPage({
             )}
           </div>
 
-          {/* Progress bar */}
-          {td && (
+          {/* Progress bar — hidden when closed */}
+          {!isClosed && td && (
             <div className="mt-6">
               <div className="flex justify-between text-xs text-gray-400 mb-1">
                 <span>{startDateStr}</span>
