@@ -240,6 +240,18 @@ export default async function PortfolioPage({
     }, {})
   ).sort((a, b) => b.lastSellDate.getTime() - a.lastSellDate.getTime())
 
+  const totalFrankingCredits = transactions
+    .filter((tx) => tx.type === 'DIVIDEND' || tx.type === 'DRP')
+    .reduce((sum, tx) => {
+      const stored = tx.frankingCredit ?? 0
+      if (stored > 0) return sum + stored
+      const cash = tx.type === 'DRP'
+        ? (tx.amount ? Number(tx.amount) : Number(tx.quantity) * Number(tx.price))
+        : Number(tx.amount ?? 0)
+      const pct = tx.frankingPct ?? 0
+      return sum + (cash / 0.70) * 0.30 * (pct / 100)
+    }, 0)
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -349,7 +361,12 @@ export default async function PortfolioPage({
           </Card>
           <Card>
             <h2 className="font-semibold text-gray-900 mb-4">Dividends Received</h2>
-            <DividendsSection holdings={performance.holdings} total={performance.dividendsReceived} currency={portfolio.currency} />
+            <DividendsSection
+              holdings={performance.holdings}
+              total={performance.dividendsReceived}
+              currency={portfolio.currency}
+              frankingTotal={totalFrankingCredits}
+            />
           </Card>
         </div>
       </>}

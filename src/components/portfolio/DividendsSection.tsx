@@ -5,9 +5,10 @@ interface DividendsSectionProps {
   holdings: Holding[]
   total: number
   currency: string
+  frankingTotal?: number
 }
 
-export function DividendsSection({ holdings, total, currency }: DividendsSectionProps) {
+export function DividendsSection({ holdings, total, currency, frankingTotal }: DividendsSectionProps) {
   const withDividends = holdings
     .filter((h) => h.dividendsReceived > 0)
     .sort((a, b) => b.dividendsReceived - a.dividendsReceived)
@@ -48,6 +49,18 @@ export function DividendsSection({ holdings, total, currency }: DividendsSection
           ))}
         </tbody>
       </table>
+
+      {frankingTotal != null && frankingTotal > 0 && (
+        <div className="mt-3 pt-3 border-t border-gray-100 dark:border-slate-700">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-500">Franking credits</span>
+            <span className="text-sm font-semibold text-indigo-600">
+              {formatCurrency(frankingTotal, currency)}
+            </span>
+          </div>
+          <p className="text-xs text-gray-400 mt-0.5">Offsets your tax liability</p>
+        </div>
+      )}
     </div>
   )
 }

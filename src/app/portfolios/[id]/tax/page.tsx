@@ -101,6 +101,21 @@ export default async function TaxPage({
         </Card>
       </div>
 
+      {/* Franking credits callout */}
+      {summary.dividends.totalFrankingCredits > 0 && (
+        <div className="rounded-xl bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 p-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-300">Franking Credits</p>
+            <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-0.5">
+              Tax offset available to claim — reduces your income tax payable for {summary.fyLabel}
+            </p>
+          </div>
+          <p className="text-2xl font-bold text-indigo-700 dark:text-indigo-300 shrink-0">
+            {formatCurrency(summary.dividends.totalFrankingCredits, portfolio.currency)}
+          </p>
+        </div>
+      )}
+
       {/* CGT preview + Dividends preview */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
