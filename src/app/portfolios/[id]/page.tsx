@@ -288,6 +288,10 @@ export default async function PortfolioPage({
       )}
 
       {transactions.length > 0 && <>
+        <Card>
+          <h2 className="font-semibold text-gray-900 mb-4">Portfolio Value</h2>
+          <PortfolioValueChart portfolioId={id} currency={portfolio.currency} />
+        </Card>
         <PerformanceSummary performance={performance} />
         <Card padding={false}>
           <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
@@ -350,10 +354,6 @@ export default async function PortfolioPage({
             </div>
           </Card>
         )}
-        <Card>
-          <h2 className="font-semibold text-gray-900 mb-4">Portfolio Value</h2>
-          <PortfolioValueChart portfolioId={id} currency={portfolio.currency} />
-        </Card>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <h2 className="font-semibold text-gray-900 mb-4">Portfolio Allocation</h2>
