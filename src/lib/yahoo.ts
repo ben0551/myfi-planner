@@ -67,6 +67,7 @@ async function getYahooCrumb(): Promise<{ crumb: string; cookie: string } | null
 }
 
 function toSymbol(ticker: string) {
+  if (ticker.startsWith('^')) return ticker  // index tickers (^AXJO, ^GSPC) need no suffix
   return ticker.includes('.') ? ticker : `${ticker}.AX`
 }
 
