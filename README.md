@@ -25,15 +25,17 @@ Most finance apps either connect to your bank (storing your credentials on someo
 Track every buy, sell, dividend, and DRP across multiple portfolios. Live and historical prices from Yahoo Finance. Multiple portfolio types supported.
 
 - Real-time prices with automatic daily sync
-- Historical value charts per portfolio
-- Capital gains tracking with average cost basis
-- Dividend income with per-payment franking credits and grossed-up amounts
+- Portfolio value chart at the top of each portfolio — Market Value, Invested, and Income series with 1M / 3M / 6M / 1Y / All range selector
+- **30-day sparklines** — mini price chart per holding showing direction at a glance (green/red)
+- **Cost basis lots** — expand any holding to see FIFO cost parcels: purchase date, quantity, cost per unit, unrealised gain/loss, days held, and CGT 50% discount eligibility
+- Capital gains tracking with FIFO cost basis
+- Dividend income with per-payment franking credits and grossed-up amounts; all-time franking credit total on the portfolio dividends card
 - **Auto dividend sync** — pulls 3 years of dividend history from Yahoo Finance into a review inbox, with per-payment franking % fetched per payment
 - **Pending inbox** — review, edit, and confirm synced dividends before they hit your ledger; supports cash account crediting and DRP toggle per row
 - **Per-ticker DRP flag** — mark a holding as DRP-registered so incoming dividends default to reinvestment
-- **Term deposits** — separate portfolio type with principal, rate, term, and accrued interest tracking
+- **Term deposits** — separate portfolio type with principal, rate, term, and accrued interest tracking; start date, end date, and term months sync bidirectionally; early close supported with optional transfer to a savings account
 - Multiple portfolios — personal account, partner's account, SMSF
-- Import transactions by forwarding broker emails, pasting email text, or entering manually
+- Import transactions by forwarding broker emails, pasting email text, uploading a `.eml` file, or entering manually
 - CSV export for records or tax time
 
 ### 🏠 Wealth Dashboard
@@ -70,6 +72,7 @@ A full Australian tax picture — CGT events, dividend income, and estimated lia
 
 - **Capital Gains Tax** — disposals of shares and investment properties, with 50% discount for assets held >12 months, capital losses, and net assessable gain
 - **Dividend income** — cash received, franking credits, and grossed-up totals per ticker
+- **Franking credits callout** — prominent FY total on the tax page showing the offset available to claim against income tax
 - **Estimated dividend tax liability** — select your marginal rate (34.5% / 39% / 47% / 49%) and see gross tax, franking offset, and net payable or franking refund
 - Tax-loss harvesting analysis — identifies positions with unrealised losses that could offset your capital gain before 30 June
 - Per-portfolio CGT and dividend drill-downs
@@ -209,6 +212,10 @@ Not strictly — you can run it on your local network by IP address. A domain gi
 - [x] Dividend auto-sync from Yahoo Finance
 - [x] Property sale / unsell with CGT and mortgage reversal
 - [x] Estimated dividend tax liability with franking offset
+- [x] Email import (paste, .eml upload, SMTP relay)
+- [x] FIFO cost basis lots with CGT discount indicator
+- [x] Term deposit early close with savings account transfer
+- [x] Franking credits total on portfolio and tax pages
 - [ ] Bank feed integration (read-only)
 - [ ] Shared household view — combined net worth across family accounts
 - [ ] Automated franking % per payment from a reliable data source
