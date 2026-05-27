@@ -462,8 +462,23 @@ export function Navbar({ hasHousehold }: { hasHousehold: boolean }) {
             </div>
           </div>
 
-          {/* Right: bell + user + mobile hamburger */}
+          {/* Right: donate + bell + user + mobile hamburger */}
           <div className="flex items-center gap-1.5">
+            <a
+              href="https://paypal.me/Fischerbenjamin?locale.x=en_AU&country.x=AU"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Support MyFi Planner ♥"
+              className="group w-8 h-8 flex items-center justify-center rounded-full transition-all duration-200 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+            >
+              <svg
+                className="w-4 h-4 text-gray-300 dark:text-slate-600 group-hover:text-rose-500 dark:group-hover:text-rose-400 transition-colors duration-200 group-hover:scale-110 transform"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+              >
+                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+              </svg>
+            </a>
             <NotificationBell />
             {session?.user && (
               <UserDropdown session={session} isAdmin={isAdmin} hasHousehold={hasHousehold} />
